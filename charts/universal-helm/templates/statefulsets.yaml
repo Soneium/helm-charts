@@ -1,0 +1,215 @@
+{{- range $stsi, $sts := $.Values.statefulsets }}
+{{- $volumeName := printf "%s-data" $sts.name }}
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $sts.name }}
+  labels:
+    {{- include "general.labels" $ | nindent 4 }}
+    {{- with $sts.labels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  serviceName: {{ $sts.name }}
+  podManagementPolicy: {{ default "Parallel" $.Values.global.podManagementPolicy }}
+  updateStrategy:
+    type: {{ default "RollingUpdate" $.Values.global.updateStrategy }}
+    {{- if (eq "Recreate" (default "RollingUpdate" $.Values.global.updateStrategy)) }}
+    rollingUpdate: null
+    {{- end }}
+  selector:
+    matchLabels:
+      statefulsetname: {{ $sts.name }}
+  replicas: {{ default 1 $sts.replicas }}
+  template:
+    metadata:
+      name: {{ template "general.fullname" $ }}
+      labels:
+        {{- include "general.labels" $ | nindent 8 }}
+        {{- with $sts.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        statefulsetname: {{ $sts.name }}
+      {{- with (merge (default (dict ) $sts.podAnnotations) (default (dict ) $.Values.global.podAnnotations))}}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "general.sa_name" $ }}
+      terminationGracePeriodSeconds: {{ default 30 $.Values.global.terminationGracePeriodSeconds }}
+      {{- with $sts.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $sts.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $sts.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $sts.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with (default $.Values.global.securityContext $sts.securityContext) }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with $sts.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+
+      {{- with $sts.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      {{- range $kcntnr, $cntnr := $sts.containers }}
+        - name: {{ $cntnr.name }}
+          image: "{{ $cntnr.image.repository }}:{{ $cntnr.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" $.Values.global.imagePullPolicy }}
+
+          {{- with $cntnr.envFrom }}
+          envFrom: {{- toYaml . | nindent 12}}
+          {{- end }}
+          {{- with $cntnr.env }}
+          env: {{- toYaml . | nindent 12}}
+          {{- end }}
+
+          {{- with $cntnr.workingDir }}
+          workingDir: {{ . }}
+          {{- end }}
+          {{- with $cntnr.command }}
+          command: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $cntnr.args }}
+          args: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $cntnr.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $cntnr.lifecycle }}
+          lifecycle: {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with (default (list ) $cntnr.securityContext) }}
+          securityContext: {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          ports:
+          {{- range $kprt, $prt := $cntnr.ports }}
+            - name: {{ $prt.name}}
+              protocol: {{ default "TCP" $prt.protocol }}
+              containerPort: {{ $prt.port }}
+          {{- end }}
+
+          {{- with (default (list ) $cntnr.startupProbe) }}
+          startupProbe: {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with (default (list ) $cntnr.livenessProbe) }}
+          livenessProbe: {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with (default (list ) $cntnr.readinessProbe) }}
+          readinessProbe: {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            - name: {{ $volumeName }}
+              mountPath: {{ $sts.persistence.volumeMountPath }}
+
+            # Volume mounts from mountConfigMaps
+            {{- range $cm := $cntnr.mountConfigMaps }}
+            - name: {{$cm.name}}
+              mountPath: {{ $cm.mountPath }}
+            {{- end }}
+
+            # Volume mounts from mountSecrets
+            {{- range $sec := $cntnr.mountSecrets }}
+            - name: {{$sec.name}}
+              mountPath: {{ $sec.mountPath }}
+              readOnly: true
+            {{- end }}
+
+            {{- range $vol := $cntnr.extraVolumes }}
+            - name: {{default (default $vol.secretName $vol.configMap) $vol.persistentVolumeClaim}}
+              mountPath: {{$vol.mountPath}}
+            {{- end }}
+      {{- end }} # {{/* range $kcntnr, $cntnr := $sts.containers */}}
+
+      volumes:
+      {{- range $cntnr := $sts.containers }}
+        {{- range $cm := $cntnr.mountConfigMaps }}
+        - name: {{$cm.name}}
+          configMap:
+            name: {{$cm.name}}
+        {{- end }}
+      {{- end }}
+
+      {{- range $cntnr := $sts.containers }}
+        {{- range $sec := $cntnr.mountSecrets }}
+        - name: {{$sec.name}}
+          secret:
+            secretName: {{$sec.name}}
+            optional: false
+        {{- end }}
+      {{- end }}
+
+      {{- range $cntnr := $sts.containers -}}
+        {{- range $vol := $cntnr.extraVolumes }}
+        {{- if hasKey $vol "secretName" }}
+        - name: {{$vol.secretName}}
+          secret:
+            secretName: {{$vol.secretName}}
+            optional: false
+        {{- else if hasKey $vol "configMap" }}
+        - name: {{$vol.configMap}}
+          configMap:
+            name: {{$vol.configMap}}
+        {{- else if hasKey $vol "persistentVolumeClaim" }}
+        - name: {{$vol.persistentVolumeClaim}}
+          persistentVolumeClaim:
+            claimName: {{$vol.persistentVolumeClaim}}
+        {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if $sts.persistence}}{{- if $sts.persistence.extraVolumes}}
+      {{- range $vol := $sts.persistence.extraVolumes }}
+        {{- if hasKey $vol "secretName" }}
+        - name: {{$vol.secretName}}
+          secret:
+            secretName: {{$vol.secretName}}
+            optional: false
+        {{- else if hasKey $vol "configMap" }}
+        - name: {{$vol.configMap}}
+          configMap:
+            name: {{$vol.configMap}}
+        {{- else if hasKey $vol "persistentVolumeClaim" }}
+        - name: {{$vol.persistentVolumeClaim}}
+          persistentVolumeClaim:
+            claimName: {{$vol.persistentVolumeClaim}}
+        {{- end }}
+      {{- end }}
+      {{- end }}{{- end }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ $volumeName }}
+      spec:
+        {{- if $sts.persistence.storageClassName }}
+        storageClassName: {{ $sts.persistence.storageClassName }}
+        {{- end }}
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ $sts.persistence.size | quote }}
+        {{- if $sts.persistence.gcpVolumeSnapshot }}
+        dataSource:
+          name: {{ $sts.persistence.gcpVolumeSnapshot | quote }}
+          kind: VolumeSnapshot
+          apiGroup: snapshot.storage.k8s.io
+        {{- end }}
+{{ end }} # {{/* range $stsi, $sts := $.Values.statefulsets */}}

@@ -1,0 +1,15 @@
+apiVersion: v2
+name: universal-helm
+description: A Helm chart for Kubernetes
+
+keywords:
+  - blockchain
+  - web3
+
+maintainers:
+  - email: vlad.sh@startale.com
+  - email: marijan.cavar@startale.com
+
+type: application
+
+version: 1.0.0

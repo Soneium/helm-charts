@@ -1,0 +1,35 @@
+statefulsets: []
+
+deployments: []
+
+cronjobs: []
+
+global:
+  serviceAccount:
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name:
+    create: true
+  podAnnotations: {}
+  nameOverride: ""
+  fullnameOverride: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  updateStrategy: RollingUpdate
+  securityContext: {}
+    # capabilities:
+    #   drop:
+    #   - ALL
+    # readOnlyRootFilesystem: true
+    # runAsNonRoot: true
+    # runAsUser: 1000
+  # emissary:
+  #   emissaryServiceName: emissary-ingress.emissary-ingress
+  #   tlsSecret:
+  #     name: ""
+  #     namespace: ""
+
+additionalManifests: []
+additionalYamlManifests: ""

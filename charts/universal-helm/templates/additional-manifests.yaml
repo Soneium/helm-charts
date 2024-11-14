@@ -1,0 +1,6 @@
+{{ range $.Values.additionalManifests }}
+---
+{{ tpl (toYaml .) $ }}
+{{ end }}
+---
+{{ tpl $.Values.additionalYamlManifests $ }}

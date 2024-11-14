@@ -1,0 +1,151 @@
+{{- range $dpli, $dpl := $.Values.deployments }}
+{{- $volumeName := printf "%s-data" $dpl.name }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $dpl.name }}
+  labels:
+    {{- include "general.labels" $ | nindent 4 }}
+    {{- with $dpl.labels }}
+      {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ default 1 $dpl.replicas }}
+  selector:
+    matchLabels:
+      deploymentname: {{ $dpl.name }}
+  template:
+    metadata:
+      name: {{ template "general.fullname" $ }}
+      labels:
+        {{- include "general.labels" $ | nindent 8 }}
+        {{- with $dpl.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        deploymentname: {{ $dpl.name }}
+      {{- with (merge (default (dict ) $dpl.podAnnotations) (default (dict ) $.Values.global.podAnnotations))}}
+      annotations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "general.sa_name" $ }}
+      terminationGracePeriodSeconds: {{ default 10 $.Values.global.terminationGracePeriodSeconds }}
+      {{- with $dpl.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $dpl.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $dpl.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $dpl.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with (default $.Values.global.securityContext $dpl.securityContext) }}
+      securityContext: {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      initContainers:
+      {{- with $dpl.initContainers }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+
+      {{- with $dpl.imagePullSecrets }}
+      imagePullSecrets: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      {{- range $kcntnr, $cntnr := $dpl.containers }}
+        - name: {{ $cntnr.name }}
+          image: "{{ $cntnr.image.repository }}:{{ $cntnr.image.tag }}"
+          imagePullPolicy: {{ default "IfNotPresent" $.Values.global.imagePullPolicy }}
+
+          {{- with $cntnr.envFrom }}
+          envFrom: {{- toYaml . | nindent 12}}
+          {{- end }}
+          {{- with $cntnr.env }}
+          env: {{- toYaml . | nindent 12}}
+          {{- end }}
+
+          {{- with $cntnr.workingDir }}
+          workingDir: {{ . }}
+          {{- end }}
+          {{- with $cntnr.command }}
+          command: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $cntnr.args }}
+          args: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $cntnr.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $cntnr.lifecycle }}
+          lifecycle: {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          ports:
+          {{- range $kprt, $prt := $cntnr.ports }}
+            - name: {{ $prt.name}}
+              protocol: {{ default "TCP" $prt.protocol }}
+              containerPort: {{ $prt.port }}
+          {{- end }}
+
+          {{- with (default (list ) $cntnr.startupProbe) }}
+          startupProbe: {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with (default (list ) $cntnr.livenessProbe) }}
+          livenessProbe: {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with (default (list ) $cntnr.readinessProbe) }}
+          readinessProbe: {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            {{- range $vol := $cntnr.extraVolumes }}
+            - name: {{default (default $vol.secretName $vol.configMap) $vol.persistentVolumeClaim}}
+              mountPath: {{$vol.mountPath}}
+            {{- end }}
+
+      {{- end }} # {{/* range $kcntnr, $cntnr := $dpl.containers */}}
+
+      volumes:
+      {{- range $cntnr := $dpl.containers -}}
+        {{- range $vol := $cntnr.extraVolumes }}
+        {{- if hasKey $vol "secretName" }}
+        - name: {{$vol.secretName}}
+          secret:
+            secretName: {{$vol.secretName}}
+            optional: false
+        {{- else if hasKey $vol "configMap" }}
+        - name: {{$vol.configMap}}
+          configMap:
+            name: {{$vol.configMap}}
+        {{- else if hasKey $vol "persistentVolumeClaim" }}
+        - name: {{$vol.persistentVolumeClaim}}
+          persistentVolumeClaim:
+            claimName: {{$vol.persistentVolumeClaim}}
+        {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if $dpl.persistence}}{{- if $dpl.persistence.extraVolumes}}
+      {{- range $vol := $dpl.persistence.extraVolumes }}
+        {{- if hasKey $vol "secretName" }}
+        - name: {{$vol.secretName}}
+          secret:
+            secretName: {{$vol.secretName}}
+            optional: false
+        {{- else if hasKey $vol "configMap" }}
+        - name: {{$vol.configMap}}
+          configMap:
+            name: {{$vol.configMap}}
+        {{- else if hasKey $vol "persistentVolumeClaim" }}
+        - name: {{$vol.persistentVolumeClaim}}
+          persistentVolumeClaim:
+            claimName: {{$vol.persistentVolumeClaim}}
+        {{- end }}
+      {{- end }}
+      {{- end }}{{- end }}
+{{ end }} # {{/* range $dpli, $dpl := $.Values.statefulsets */}}

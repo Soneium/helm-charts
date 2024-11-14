@@ -1,0 +1,107 @@
+{{- range $ndpl, $dpl := $.Values.deployments }}
+{{- range $kcntnr, $cntnr := $dpl.containers }}
+{{- range $kprt, $prt := $cntnr.ports }}
+{{$dname:=printf "%s-%s-%s" $dpl.name $cntnr.name $prt.name}}
+
+{{/* # If .emissary enabled==true or not given*/}}
+{{- if $prt.emissary }}
+{{- if or (eq "true" (get $prt.emissary "enabled"|toString)) (empty (get $prt.emissary "enabled"|toString))}}
+
+{{ $emissarySvc:="emissary-ingress.emissary-ingress"}}
+{{ if $.Values.global.emissary}}{{if $.Values.global.emissary.emissaryServiceName}}
+  {{$emissarySvc:=$.Values.global.emissary.emissaryServiceName}}
+{{ end }}{{end}}
+
+kind: Host
+apiVersion: getambassador.io/v3alpha1
+metadata:
+  name: {{$dname}}
+  labels:
+    {{- include "general.labels" $ | nindent 4 }}
+  annotations:
+    external-dns.ambassador-service: {{$emissarySvc}}
+  {{- with $prt.emissary.annotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  hostname: {{$prt.emissary.host}}
+{{if $.Values.global.emissary}}{{if $.Values.global.emissary.tlsSecret}}
+  tlsSecret:
+    name: {{$.Values.global.emissary.tlsSecret.name}}
+    namespace: {{$.Values.global.emissary.tlsSecret.namespace}}
+{{end}}{{end}}
+---
+apiVersion: getambassador.io/v2
+kind: Mapping
+metadata:
+  name: {{$dname}}
+  labels:
+    {{- include "general.labels" $ | nindent 4 }}
+spec:
+  {{- with $prt.emissary.headers }}
+  headers:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  host: {{$prt.emissary.host}}
+  prefix: {{default "/" $prt.emissary.prefix}}
+  service: http://{{$dname}}:{{$prt.port}}
+---
+{{- end -}}{{- end -}}
+
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- range $ndpl, $dpl := $.Values.statefulsets }}
+{{- range $kcntnr, $cntnr := $dpl.containers }}
+{{- range $kprt, $prt := $cntnr.ports }}
+{{$dname:=printf "%s-%s-%s" $dpl.name $cntnr.name $prt.name}}
+
+{{/* # If .emissary enabled==true or not given*/}}
+{{- if $prt.emissary }}
+{{- if or (eq "true" (get $prt.emissary "enabled"|toString)) (empty (get $prt.emissary "enabled"|toString))}}
+
+{{ $emissarySvc:="emissary-ingress.emissary-ingress"}}
+{{ if $.Values.global.emissary}}{{if $.Values.global.emissary.emissaryServiceName}}
+  {{$emissarySvc:=$.Values.global.emissary.emissaryServiceName}}
+{{ end }}{{end}}
+
+kind: Host
+apiVersion: getambassador.io/v3alpha1
+metadata:
+  name: {{$dname}}
+  labels:
+    {{- include "general.labels" $ | nindent 4 }}
+  annotations:
+    external-dns.ambassador-service: {{$emissarySvc}}
+  {{- with $prt.emissary.annotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  hostname: {{$prt.emissary.host}}
+{{if $.Values.global.emissary}}{{if $.Values.global.emissary.tlsSecret}}
+  tlsSecret:
+    name: {{$.Values.global.emissary.tlsSecret.name}}
+    namespace: {{$.Values.global.emissary.tlsSecret.namespace}}
+{{end}}{{end}}
+---
+apiVersion: getambassador.io/v2
+kind: Mapping
+metadata:
+  name: {{$dname}}
+  labels:
+    {{- include "general.labels" $ | nindent 4 }}
+spec:
+  {{- with $prt.emissary.headers }}
+  headers:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  host: {{$prt.emissary.host}}
+  prefix: {{default "/" $prt.emissary.prefix}}
+  service: http://{{$dname}}:{{$prt.port}}
+---
+{{- end -}}{{- end -}}
+
+{{- end -}}
+{{- end -}}
+{{- end -}}
