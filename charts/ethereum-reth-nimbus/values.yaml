@@ -1,0 +1,213 @@
+# -- Number of replicas
+replicas: 1
+
+ethereumChain: ""
+
+nodeSelector: {}
+  # karpenter.sh/nodepool: lvm-localpv
+  # node.kubernetes.io/instance-type: i3.4xlarge
+
+persistence:
+  size: ""
+  storageClassName: lvm-localpv
+
+reth:
+  image:
+    repository: ghcr.io/paradigmxyz/reth
+    # -- Nimbus image tag
+    tag: v1.4.3
+  resources:
+    # -- Nimbus resource requests and limits
+    requests:
+      cpu: 2
+      memory: 16Gi
+    limits:
+      # cpu: 500m
+      memory: 24Gi
+
+nimbus:
+  image:
+    repository: statusim/nimbus-eth2
+    # -- Nimbus image tag
+    tag: amd64-v25.5.0
+  resources:
+    # -- Nimbus resource requests and limits
+    requests:
+      cpu: 1
+      memory: 8Gi
+    limits:
+      # cpu: 500m
+      memory: 12Gi
+
+readynessProbe:
+  enabled: true
+
+ethereumExporter:
+  enabled: false
+  image:
+    repository: ethpandaops/ethereum-metrics-exporter
+    tag: 0.27.1-debian
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+dataSnapshot:
+  # Adds init container to restare data from S3 snapshot
+  restoreData: false
+  # Creates cronjob to schedule data abackups to S3
+  backupData: false
+  sourcePvcName: storage-node-0
+  sourcePod: node-0
+  # -- Backup bucket name
+  bucketName: ""
+  # -- Backup bucket region
+  bucketRegion: ""
+  # IAM role to dowenload/upload data from/to S3
+  awsSnapshotIamRoleArn: ""
+
+  backupSchedule: "0 0 * * *"
+  # -- Backup retention
+  backupRetainDays: 7
+  activeDeadlineHours: 8
+  ethereumClients: reth-nimbus
+
+# -- Pod annotations
+podAnnotations:
+  karpenter.sh/do-not-disrupt: "true"
+
+p2pNlb:
+  #* AWS EIP to attach to NLB exposing p2p ports
+  eIPs: []
+  #* Security group to attach to NLB exposing p2p ports
+  securityGroup: ""
+  #* Subnet name without az name, subnets should be named in the following way: `${publicSubnetPrefix}-${azName}`.
+  subnetPrefix: ""
+
+ingress:
+  # -- Ingress resource for the HTTP API
+  enabled: false
+  # -- Annotations for Ingress
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  # -- Ingress host
+  hosts:
+    - host: chart-example.local
+      paths: []
+  # -- Ingress TLS
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+serviceAccount:
+  #* if dataSnapshot.restoreData is true, or  dataSnapshot.backupData is true
+  #* awsSnapshotIamRoleArn will be added to annotations of the SA
+  annotations: {}
+  name: node
+
+# -- Overrides the chart's computed fullname
+fullnameOverride: node
+
+# -- The security context for pods
+# @default -- See `values.yaml`
+securityContext:
+  runAsGroup: 1001
+  # runAsNonRoot: true   #! todo
+  runAsUser: 1001
+  fsGroupChangePolicy: "OnRootMismatch"
+
+# -- The security context for containers
+# @default -- See `values.yaml`
+containerSecurityContext:
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1001
+
+tolerations:
+  - effect: NoSchedule
+    key: lvm-localpv
+    operator: Equal
+    value: "true"
+
+vmPodScrape:
+  # -- If true, a ServiceMonitor CRD is created for a prometheus operator
+  # https://github.com/coreos/prometheus-operator
+  enabled: true
+  #* region to use in region_pod label
+  #* This is used to identify the region of the pod in the metrics
+  region: ""
+
+pullPolicy: IfNotPresent
+# -- Pod management policy
+podManagementPolicy: Parallel
+
+rbac:
+  create: true
+  rules:
+    - apiGroups: ['*']
+      resources:
+        - services
+      verbs: ['*']
+    - apiGroups: ['*']
+      resources:
+        - pods
+      verbs: ['*']
+    - apiGroups: ["*"]
+      resources: ["volumesnapshots", "persistentvolumeclaims"] # pvc, volumesnapshot, job
+      verbs: ["*"]
+
+# -- How long to wait until the pod is forcefully terminated
+terminationGracePeriodSeconds: 90
+
+# -- Pod labels
+podLabels: {}
+
+# -- Image pull secrets for Docker images
+imagePullSecrets: []
+
+# -- Annotations for the StatefulSet
+annotations: {}
+
+# -- Overrides the chart's name
+nameOverride: ""
+
+# -- Pod priority class
+priorityClassName: null
+
+# -- Define the PodDisruptionBudget spec
+# If not set then a PodDisruptionBudget will not be created
+podDisruptionBudget: {}
+# minAvailable: 1
+# maxUnavailable: 1
+
+# -- Update strategy for the Statefulset
+updateStrategy:
+  # -- Update strategy type
+  type: RollingUpdate
+
+# -- Additional volumes
+extraVolumes: []
+
+# -- Additional volume mounts
+extraVolumeMounts: []
+
+# -- Additional ports. Useful when using extraContainers or extraContainerPorts
+extraPorts: []
+
+# -- Additional ports for the main container
+extraContainerPorts: []
+
+# -- Additional env variables
+extraEnv: []
+
+# -- Additional env variables injected via a created secret
+secretEnv: {}

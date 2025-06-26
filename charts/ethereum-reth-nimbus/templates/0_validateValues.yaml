@@ -1,0 +1,23 @@
+# {{ required "ethereumChain must be specified" .Values.ethereumChain }}
+# {{ required "dataSnapshot.ethereumClients must be specified" .Values.dataSnapshot.ethereumClients }}
+
+# {{- if or .Values.dataSnapshot.restoreData .Values.dataSnapshot.backupData}}
+#   {{ required "dataSnapshot.bucketName must be specified" .Values.dataSnapshot.bucketName }}
+#   {{ required "dataSnapshot.bucketRegion must be specified" .Values.dataSnapshot.bucketRegion }}
+#   {{ required "awsSnapshotIamRoleArn must be specified" .Values.dataSnapshot.awsSnapshotIamRoleArn }}
+# {{- end }}
+
+# Check persistence.size
+# {{ required "persistence.size must be specified" .Values.persistence.size }}
+
+# Check p2pNlb values
+# {{ required "p2pNlb.securityGroup must be specified" .Values.p2pNlb.securityGroup }}
+# {{ required "p2pNlb.subnetPrefix must be specified" .Values.p2pNlb.subnetPrefix }}
+
+# {{- if gt (len .Values.p2pNlb.eIPs) 0}}
+#   {{ required "p2pNlb.eIPs must be >= replicas." (ge (len .Values.p2pNlb.eIPs) (int .Values.replicas)) }}
+# {{- end }}
+
+# {{- if .Values.vmPodScrape.enabled }}
+#   {{ required "vmPodScrape.region must be set." .Values.vmPodScrape.region }}
+# {{- end }}

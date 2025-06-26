@@ -1,0 +1,54 @@
+dugtrio:
+  nodes:
+    - url: "https://us-west-1.something.com"
+    - url: "https://us-east-2.something.com"
+    - url: "https://us-west-3.something.com"
+    - url: "https://us-east-4.something.com"
+  resources:
+    limits:
+      cpu: 1
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 256Mi
+
+proxyd:
+  nodes:
+    - url: "https://us-west-1.something.com:111"
+      ws: "wss://us-west-1"
+      backendGroup_Main: true
+
+    - url: "https://us-east-2.something.com:222"
+      ws: "wss://us-west-2"
+      backendGroup_Main: true
+
+    - url: "https://us-west-3.something.com:333"
+      ws: "wss://us-west-3"
+      backendGroup_Multicall: true
+
+    - url: "https://us-east-4.something.com"
+      ws: "wss://us-west-4"
+      backendGroup_Main: true
+      backendGroup_Multicall: true
+
+# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: true
+  className: aws-lb
+  annotations:
+    alb.ingress.kubernetes.io/load-balancer-name: l1-proxy-reth-rpc-alb
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/scheme: internal
+
+  executionRpcDNSName: eth1-rpc.something.com
+  executionWsDNSName: eth1-ws.something.com
+  beaconRpcDNSName: eth2-rpc.something.com
+
+vmPodScrape:
+  region: shortregion
+
+tolerations:
+  - key: "local-disk"    #! To allow to run proxy on the same pod with l1 node
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"

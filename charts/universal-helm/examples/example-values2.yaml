@@ -66,6 +66,7 @@ deployments:
           - name: port8080-another
             port: 8080
             protocol: TCP
+            publishNotReadyAddresses: true
             service:
               type: ClusterIP
               annotations:

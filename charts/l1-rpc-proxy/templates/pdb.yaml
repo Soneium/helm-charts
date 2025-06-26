@@ -1,0 +1,9 @@
+kind: PodDisruptionBudget
+apiVersion: policy/v1
+metadata:
+  name: {{ include "rpc-proxy.fullname" . }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "rpc-proxy.selectorLabels" . | nindent 6 }}

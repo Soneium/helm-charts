@@ -1,0 +1,11 @@
+apiVersion: v2
+name: ethereum-reth-nimbus
+description: >
+  Ethereum node with reth and  nimbus
+home: https://soneium.com
+sources:
+  - https://github.com/soneium
+type: application
+version: 0.0.65
+maintainers:
+  - name: vlad

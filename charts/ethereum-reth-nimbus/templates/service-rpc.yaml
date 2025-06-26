@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "node.fullname" . }}-rpc
+  labels:
+    {{- include "node.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "node.selectorLabels" . | nindent 4 }}
+  publishNotReadyAddresses: true
+  ports:
+    - name: eth1-rpc
+      port: 8545
+      protocol: TCP
+      targetPort: eth1-rpc
+    - name: eth1-ws
+      port: 8546
+      protocol: TCP
+      targetPort: eth1-ws
+    - name: eth2-rpc
+      port: 9545
+      protocol: TCP
+      targetPort: eth2-rpc

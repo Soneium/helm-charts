@@ -1,0 +1,188 @@
+{{- if .Values.readynessProbe.enabled }}
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: readiness-probe-py
+data:
+  readiness_probe.py: |
+    import json
+    import os
+    import sys
+    import datetime
+    import logging
+    from aiohttp import ClientSession, ClientTimeout
+    from datetime import timezone
+    from flask import Flask, request, abort
+    import asyncio
+    from functools import wraps
+
+    # Status codes
+    READY_CODE = 200
+    NOT_READY_CODE = 450
+    ERROR_CODE = 590
+
+    # Get configuration from environment variables with defaults
+    PROTO = os.getenv("PROTO")
+    if not PROTO in ["ethereum", "optimism"]:
+      logging.error(f"Not supported PROTO: {PROTO}")
+      sys.exit(1)
+
+    MIN_PEERS = int(os.getenv("MIN_PEERS", "5"))
+    # EXECUTION_BLOCK_MAX_AGE = int(os.getenv("EXECUTION_BLOCK_MAX_AGE", "30"))
+    BLOCK_MAX_AGE = int(os.getenv("BLOCK_MAX_AGE", "30"))
+    EXECUTION_RPC_URL = os.getenv("EXECUTION_RPC_URL", "http://localhost:8545")
+    CONSENSUS_RPC_URL = os.getenv("CONSENSUS_RPC_URL", "http://localhost:9545")
+    REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "5"))
+    DEBUG_LEVEL = int(os.getenv("DEBUG_LEVEL", "1"))
+    HTTPS_PROXY = os.getenv("HTTPS_PROXY")
+
+    # Configure logging
+    LOG_LEVEL = logging.DEBUG if DEBUG_LEVEL == 2 else logging.INFO
+    logging.basicConfig(
+      format='%(asctime)s %(levelname)-8s %(message)s',
+      level=LOG_LEVEL,
+      datefmt='%Y-%m-%d %H:%M:%S')
+
+    logging.info(f"""
+    Script is running with the following settings:
+    PROTO: {PROTO}
+    MIN_PEERS: {MIN_PEERS}
+    BLOCK_MAX_AGE: {BLOCK_MAX_AGE}
+    EXECUTION_RPC_URL: {EXECUTION_RPC_URL}
+    CONSENSUS_RPC_URL: {CONSENSUS_RPC_URL}
+    DEBUG_LEVEL: {DEBUG_LEVEL}
+    REQUEST_TIMEOUT: {REQUEST_TIMEOUT}
+    HTTPS_PROXY: {HTTPS_PROXY}
+    """)
+
+    app = Flask(__name__)
+
+    # Helper function to run async code in Flask route
+    def async_route(f):
+      @wraps(f)
+      def wrapped(*args, **kwargs):
+        return asyncio.run(f(*args, **kwargs))
+      return wrapped
+
+    async def node_rpc_request_post(session: ClientSession, target: str, method: str, params, id: int = 1) -> dict:
+      headers = {"Content-Type": "application/json"}
+      data = {
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": params,
+        "id": id
+      }
+      async with session.post(target, json=data, headers=headers) as response:
+        return await response.json()
+
+    async def get_opnode_peers(session: ClientSession, target: str) -> int:
+      repl = await node_rpc_request_post(session, target, "opp2p_peers", [True])
+      return int(repl["result"]["totalConnected"])
+
+    async def get_opnode_unsafe_l2_timestamp(session: ClientSession, target: str) -> int:
+      repl = await node_rpc_request_post(session, target, "optimism_syncStatus", [])
+      return int(repl["result"]["unsafe_l2"]["timestamp"])
+
+    async def get_geth_peers(session: ClientSession, target: str) -> int:
+      repl = await node_rpc_request_post(session, target, "net_peerCount", [])
+      return int(repl["result"], 16)
+
+    async def get_geth_latest_block_timestamp(session: ClientSession, target: str) -> int:
+      repl = await node_rpc_request_post(session, target, "eth_getBlockByNumber", ["latest", False])
+      return int(repl["result"]["timestamp"], 16)
+
+    async def node_rpc_request_get(session: ClientSession, target: str) -> dict:
+      async with session.get(target) as response:
+        return await response.json(content_type=None)
+
+    async def get_consensus_peers(session: ClientSession, target: str) -> int:
+      repl = await node_rpc_request_get(session, f"{target}/eth/v1/node/peer_count")
+      return int(repl["data"]["connected"], 0)
+
+    # async def get_consensus_head_block_timestamp(session: ClientSession, target: str) -> int:
+    #   repl = await node_rpc_request_get(session, f"{target}/eth/v2/beacon/blocks/head")
+    #   return int(repl["data"]["connected"], 0)
+
+    @app.route("/health")
+    def health():
+      return {"status": "Service running"}, 200
+
+    @app.route("/ready")
+    @async_route
+    async def ready():
+      responseCode = NOT_READY_CODE
+      response = {}
+
+      timeout = ClientTimeout(total=REQUEST_TIMEOUT)
+      async with ClientSession(timeout=timeout, proxy=HTTPS_PROXY) as session:
+        tasks = {}
+
+        if PROTO  == "ethereum":
+          tasks["executionPeersNum"] = get_geth_peers(session, EXECUTION_RPC_URL)
+          tasks["consensusPeersNum"] = get_consensus_peers(session, CONSENSUS_RPC_URL)
+          tasks["blockTimestamp"] = get_geth_latest_block_timestamp(session, EXECUTION_RPC_URL)
+          # tasks["consensusBlockTimestamp"] = get_consensus_sync_distance(session, CONSENSUS_RPC_URL)
+
+        elif PROTO  == "optimism":
+          tasks["executionPeersNum"] = get_geth_peers(session, EXECUTION_RPC_URL)
+          tasks["consensusPeersNum"] = get_opnode_peers(session, CONSENSUS_RPC_URL)
+          # tasks["executionBlockTimestamp"] = get_geth_latest_block_timestamp(session, EXECUTION_RPC_URL)
+          tasks["blockTimestamp"] = get_opnode_unsafe_l2_timestamp(session, CONSENSUS_RPC_URL)
+
+        results = dict()
+        try:
+          # Gather all tasks concurrently
+          results = dict(zip(
+            tasks.keys(),
+            await asyncio.gather(*tasks.values(), return_exceptions=True)
+          ))
+        except Exception as e:
+          responseCode = ERROR_CODE
+          response = {"error": f"Unexpected error: {str(e)}"}
+          logging.error(f"Unexpected error: {e}")
+
+        # Check for exceptions in results
+        for key, value in results.items():
+          logging.debug(f"{key}: {value}")
+          if isinstance(value, Exception):
+            responseCode = ERROR_CODE
+            response = {"error": f"Caught exception in {key}: {str(value)}"}
+            logging.error(f"Caught exception in {key}: {value}")
+            return response, responseCode
+
+        utc_time = datetime.datetime.now(timezone.utc)
+        utc_timestamp = int(utc_time.timestamp())
+
+        executionPeersNum = results.get("executionPeersNum", 0)
+        consensusPeersNum = results.get("consensusPeersNum", 0)
+        blockTimestamp = results.get("blockTimestamp", 0)
+        blockAge = utc_timestamp - blockTimestamp
+
+        response = {
+          "executionPeersNum": executionPeersNum,
+          "consensusPeersNum": consensusPeersNum,
+          "blockAge": blockAge,
+        }
+
+        #* Readyness condition
+        if (
+          executionPeersNum >= MIN_PEERS and
+          consensusPeersNum >= MIN_PEERS and
+          blockAge <= BLOCK_MAX_AGE
+        ):
+          responseCode = READY_CODE
+          logging.debug(f"Ready: {json.dumps(response)}")
+        else:
+          logging.info(f"Not ready: {json.dumps(response)}")
+
+
+        logging.debug(f"response: {json.dumps(response)}")
+
+
+      return response, responseCode
+
+    if __name__ == '__main__':
+      logging.getLogger().setLevel(logging.DEBUG if DEBUG_LEVEL == 2 else logging.INFO)
+      # app.run(host="0.0.0.0", port=9000, debug=True)
+      app.run()
+{{- end }}

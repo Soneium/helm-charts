@@ -1,0 +1,68 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: dugtrio-yaml
+data:
+  dugtrio.yaml: |
+    logging:
+      #outputLevel: "debug"
+      #outputStderr: false
+      #filePath: "explorer.log"
+      #fileLevel: "warn"
+
+    # HTTP Server configuration
+    server:
+      # Address to listen on
+      host: "0.0.0.0"
+      # Port to listen on
+      port: "9545"
+
+    # Beacon Node Endpoints
+    endpoints:
+    {{- with .Values.dugtrio.nodes }}
+    {{- range . }}
+    {{- $name := regexReplaceAll "(http|https)://([^/]+).*" .url "${2}" | replace "." "_" | replace ":" "_"  }}
+      - name: "{{$name}}"
+        url: "{{ .url }}"
+    {{- end }}
+    {{- end }}
+
+    # Pool configuration
+    pool:
+      schedulerMode: "rr"
+      followDistance: 10
+      maxHeadDistance: 2
+
+    # Proxy configuration
+    proxy:
+      # number of proxies in front of dugtrio
+      proxyCount: 1
+
+      # proxy call timeout
+      callTimeout: 60s
+
+      # proxy session timeout
+      sessionTimeout: 10m
+
+      # reuse the same endpoint when possible
+      stickyEndpoint: true
+
+      # call rate limit (calls per second)
+      callRateLimit: 100
+
+      # call rate burst limit
+      callRateBurst: 1000
+
+      # blocked api paths (regex patterns)
+      blockedPaths:
+        - ^/eth/v[0-9]+/debug/.*
+
+    # Frontend configuration
+    frontend:
+      # Enable or disable to web frontend
+      enabled: true
+      minify: true
+      siteName: "Dugtrio"
+
+    metrics:
+      enabled: true

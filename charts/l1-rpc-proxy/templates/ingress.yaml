@@ -1,0 +1,52 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "rpc-proxy.fullname" . }}
+  labels:
+    {{- include "rpc-proxy.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  tls:
+    - hosts:
+      - {{.Values.ingress.executionRpcDNSName}}
+      - {{.Values.ingress.executionWsDNSName}}
+      - {{.Values.ingress.beaconRpcDNSName}}
+  rules:
+    - host: {{.Values.ingress.executionRpcDNSName}}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ include "rpc-proxy.fullname" . }}
+                port:
+                  name: proxyd-http
+            path: /
+            pathType: Prefix
+    - host: {{.Values.ingress.executionWsDNSName}}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ include "rpc-proxy.fullname" . }}
+                port:
+                  name: proxyd-ws
+            path: /
+            pathType: Prefix
+    - host: {{.Values.ingress.beaconRpcDNSName}}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {{ include "rpc-proxy.fullname" . }}
+                port:
+                  name: dugtrio-http
+            path: /
+            pathType: Prefix
+{{- end }}

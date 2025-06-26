@@ -1,0 +1,284 @@
+
+statefulsets:
+  - name: node
+    replicas: 3
+
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            statefulsetname: node
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: statefulsetname
+                  operator: In
+                  values:
+                    - node
+            topologyKey: kubernetes.io/hostname
+
+    persistence:
+      size: 3000Gi
+      storageClassName: localpv-hostpath
+      volumeMountPath: /data
+      extraVolumes:
+        - secretName: opnode-p2p-keys
+        - secretName: opgeth-p2p-keys
+
+    nodeSelector:
+      karpenter.sh/nodepool: local-storage
+      node.kubernetes.io/instance-type: i3.2xlarge
+    podAnnotations:
+      karpenter.sh/do-not-disrupt: "true"
+    tolerations:
+      - key: "local-disk"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+    initContainers:
+#
+      - name: restore-from-backup
+        securityContext:
+          runAsUser: 0
+        image: restic/restic:latest
+        workingDir: /data
+        env:
+          - name: APP_HOME
+            value: "/data"
+          - name: AWS_DEFAULT_REGION
+            value: "ap-northeast-1"
+          - name: RESTIC_PASSWORD
+            value: "astar"
+          - name: RESTIC_PROGRESS_FPS
+            value: "0.016666"
+          - name: RESTIC_REPOSITORY
+            value: "s3:https://s3.amazonaws.com/stg-osaki-l1-snapshots/sepolia/reth-nimbus"
+          - name: RESTIC_HOST
+            value: "reth-nimbus"      #* cli used
+        command:
+          - /bin/sh
+          - -c
+          - |
+            set -xu
+
+            RESTORED_FLAG="${APP_HOME}/backup-restored.txt"
+
+            if [ -f $RESTORED_FLAG ]; then
+              echo "Node already restored from backup"
+              exit 0
+            fi
+
+            restic self-update
+
+    containers:
+      - name: reth
+        image:
+          repository: ghcr.io/paradigmxyz/reth
+          tag: v1.1.4
+        workingDir: /data
+        env:
+          - name: EXTERNAL_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.annotations['external-ip']
+          - name: RETH_TRUSTED_PEERS
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.annotations['reth-trusted-peers']
+          - name: APP_HOME
+            value: "/data"
+        command:
+          # - sleep
+          # - "10000000000000"
+          - reth
+          - node
+          - --chain=sepolia
+          - --datadir=$(APP_HOME)/reth
+          - --http
+          - --http.addr=0.0.0.0
+          - --http.port=8545
+          - --http.api=admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots
+          - --http.corsdomain=*
+          - --ws
+          - --ws.addr=0.0.0.0
+          - --ws.port=8546
+          - --ws.origins=*
+          - --ws.api=admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots
+          - --authrpc.jwtsecret=$(APP_HOME)/jwt.txt
+          - --authrpc.addr=0.0.0.0
+          - --authrpc.port=8551
+          - --port=30303
+          - --discovery.port=30304
+          - --metrics=0.0.0.0:7300
+          - --log.file.max-files=0
+          - --nat=extip:$(EXTERNAL_IP)
+          - --p2p-secret-key=$(APP_HOME)/reth/p2p_key_$(EXTERNAL_IP)
+          - --trusted-peers=$(RETH_TRUSTED_PEERS)
+        ports:
+          - name: rpc
+            type: ClusterIP
+            port: 8545
+            protocol: TCP
+          - name: ws
+            type: ClusterIP
+            port: 8546
+            protocol: TCP
+          - name: p2p
+            port: 30303
+            protocol: TCP
+            publishNotReadyAddresses: true
+          - name: discovery
+            port: 30304
+            protocol: UDP
+            publishNotReadyAddresses: true
+          - name: metrics
+            port: 7300
+            protocol: TCP
+        lifecycle:
+          preStop:  #* To let it reply to all requests in process
+            exec:
+              command: ["/bin/sh", "-c", "sleep 60"]
+        resources:
+          limits:
+            # cpu: 8
+            memory: 24Gi
+          requests:
+            cpu: 2
+            memory: 16Gi
+        startupProbe:
+          tcpSocket:
+            port: 8545
+        livenessProbe:
+          tcpSocket:
+            port: 8545
+      - name: nimbus
+        image:
+          repository: statusim/nimbus-eth2
+          tag: amd64-v24.12.0
+        workingDir: /data
+        env:
+          - name: EXTERNAL_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.annotations['external-ip']
+        command:
+          - /home/user/nimbus_beacon_node
+          - --network=sepolia
+          - --data-dir=/data/nimbus
+          - --el=http://localhost:8551
+          - --jwt-secret=/data/jwt.txt
+          - --history=archive
+          - --nat=extip:$(EXTERNAL_IP)
+          - --tcp-port=9222
+          - --udp-port=9223
+          - --rest
+          - --rest-port=9545
+          - --rest-address=0.0.0.0
+          - --rest-allow-origin=*
+          - --metrics
+          - --metrics-address=0.0.0.0
+          - --metrics-port=7301
+        ports:
+          - name: rpc
+            type: ClusterIP
+            port: 9545
+            protocol: TCP
+          - name: p2p
+            port: 9222
+            protocol: TCP
+            publishNotReadyAddresses: true
+          - name: discovery
+            port: 9223
+            protocol: UDP
+            publishNotReadyAddresses: true
+          - name: metrics
+            port: 7301
+            protocol: TCP
+        lifecycle:
+          preStop: #* To let it reply to all requests in process
+            exec:
+              command: ["/bin/sh", "-c", "sleep 60"]
+        resources:
+          limits:
+            # cpu: 8
+            memory: 12Gi
+          requests:
+            cpu: 1
+            memory: 8Gi
+        startupProbe:
+          tcpSocket:
+            port: 9545
+          periodSeconds: 60
+          failureThreshold: 180
+        livenessProbe:
+          tcpSocket:
+            port: 9545
+
+      - name: ethereum-exporter
+        image:
+          repository: samcm/ethereum-metrics-exporter
+          tag: 0.26.0-debian
+        command:
+          # - sleep
+          # - "10000000000000"
+          - /bin/sh
+          - -c
+          - |
+            sleep 30
+            exec /ethereum-metrics-exporter \
+              --consensus-url=http://localhost:9545 \
+              --execution-url=http://localhost:8545 \
+              --execution-modules="admin,eth,net,web3,txpool" \
+              --metrics-port=7302
+        ports:
+          - name: metrics
+            port: 7302
+            protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+global:
+  terminationGracePeriodSeconds: 90
+  fullnameOverride: release-name
+  serviceAccount:
+    name: node
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::851725285563:role/stg-osaki-l1-snapshots-euc1
+  securityContext:
+    fsGroup: 1001
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroupChangePolicy: "Always"
+
+# # Additional manifests to deploy as an array
+# additionalManifests:
+additionalYamlManifests: |
+
+  kind: ConfigMap
+  apiVersion: v1
+  metadata:
+    name: dugtrio-yaml
+  data:
+    dugtrio.yaml: |
+      logging:
+        #outputLevel: "debug"
+        #outputStderr: false
+        #filePath: "explorer.log"
+        #fileLevel: "warn"
+  
+      # HTTP Server configuration
+      server:
+        # Address to listen on
+        host: "0.0.0.0"
+        # Port to listen on
+        port: "9545"
+  

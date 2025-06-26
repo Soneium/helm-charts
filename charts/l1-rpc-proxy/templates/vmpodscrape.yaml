@@ -1,0 +1,35 @@
+{{- if .Values.vmPodScrape.enabled }}
+kind: VMPodScrape
+apiVersion: operator.victoriametrics.com/v1beta1
+metadata:
+  name: {{ include "rpc-proxy.fullname" . }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "rpc-proxy.selectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+    - targetPort: 7300 #proxyd
+      path: /metrics
+      scheme: http
+      metricRelabelConfigs:
+        #* Add label region_pod
+        - action: replace_all
+          source_labels: ["pod"]
+          target_label: "region_pod"
+          regex: "(.+)"
+          replacement: "{{.Values.vmPodScrape.region}}-$1"
+        - target_label: service
+          replacement: l1-rpc-proxy
+    - targetPort: 9545 #dugtrio
+      path: /metrics
+      scheme: http
+      metricRelabelConfigs:
+        #* Add label region_pod
+        - action: replace_all
+          source_labels: ["pod"]
+          target_label: "region_pod"
+          regex: "(.+)"
+          replacement: "{{.Values.vmPodScrape.region}}-$1"
+        - target_label: service
+          replacement: l1-rpc-proxy
+{{- end }}

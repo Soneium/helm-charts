@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rpc-proxy.fullname" . }}
+  labels:
+    {{- include "rpc-proxy.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "rpc-proxy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/cm-dugtrio-yaml: {{.Files.Get "templates/cm-dugtrio-yaml.yaml" | sha256sum }}
+        checksum/cm-proxyd-toml: {{.Files.Get "templates/cm-proxyd-toml.yaml" | sha256sum }}
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "rpc-proxy.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "rpc-proxy.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: proxyd
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.proxyd.image.repository }}:{{ .Values.proxyd.image.tag }}"
+          imagePullPolicy: {{ .Values.proxyd.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - proxyd
+            - /config/proxyd.toml
+          volumeMounts:
+            - mountPath: /config
+              name: proxyd-toml
+          ports:
+            - name: proxyd-http
+              containerPort: 8545
+              protocol: TCP
+            - name: proxyd-ws
+              containerPort: 8546
+              protocol: TCP
+            - name: proxyd-metrics
+              containerPort: 7300
+              protocol: TCP
+          {{- with .Values.proxyd.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          lifecycle:
+            preStop: #* To let it reply to all requests in process
+              exec:
+                command: ["/bin/sh", "-c", "sleep 60"]
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: proxyd-http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: proxyd-http
+
+        - name: dugtrio
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.dugtrio.image.repository }}:{{ .Values.dugtrio.image.tag }}"
+          imagePullPolicy: {{ .Values.dugtrio.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - /app/dugtrio-proxy
+            - -config
+            - /config/dugtrio.yaml
+          volumeMounts:
+            - mountPath: /config
+              name: dugtrio-yaml
+          ports:
+            - name: dugtrio-http
+              containerPort: 9545
+              protocol: TCP
+          {{- with .Values.dugtrio.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          lifecycle:
+            preStop: #* To let it reply to all requests in process
+              exec:
+                command: ["/bin/sh", "-c", "sleep 60"]
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: dugtrio-http
+          readinessProbe:
+            httpGet:
+              path: /healthcheck
+              port: dugtrio-http
+
+      volumes:
+        - name: proxyd-toml
+          configMap:
+            name: proxyd-toml
+        - name: dugtrio-yaml
+          configMap:
+            name: dugtrio-yaml
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/instance
+                    operator: In
+                    values:
+                      - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}

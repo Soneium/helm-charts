@@ -1,0 +1,27 @@
+# Validate given values
+# {{- if gt (int .Values.replicas) 1 }}
+#   {{ required "HA redis must be configured" .Values.redis }}
+# {{- end }}
+
+# {{ required "proxyd.nodes must be added." (gt (len .Values.proxyd.nodes) 0) }}
+# {{- with .Values.proxyd.nodes }}
+# {{- range . }}
+# {{- if not (or .backendGroup_Main .backendGroup_Multicall) }}
+#   {{- fail "backendGroup_Main or backendGroup_Multicall must be set for each proxyd node" }}
+# {{- end }}
+# {{- end }}
+# {{- end }}
+
+# {{ required "dugtrio.nodes must be added." (gt (len .Values.dugtrio.nodes) 0) }}
+
+# {{- if .Values.vmPodScrape.enabled }}
+#   {{ required "vmPodScrape.region must be set." .Values.vmPodScrape.region }}
+# {{- end }}
+
+
+# {{- if .Values.ingress.enabled }}
+#   {{ required "ingress.executionRpcDNSName must be set." .Values.ingress.executionRpcDNSName }}
+#   {{ required "ingress.executionWsDNSName must be set." .Values.ingress.executionWsDNSName }}
+#   {{ required "ingress.beaconRpcDNSName must be set." .Values.ingress.beaconRpcDNSName }}
+# {{- end }}
+

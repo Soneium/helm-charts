@@ -1,0 +1,110 @@
+#! To have >1 replicas, need to have a HA redis to share the state between replicas
+replicas: 1
+redis: ""
+
+dugtrio:
+
+  nodes: []
+    # - url: "https://us-west-1"
+    # - url: "https://us-east-2"
+    # - url: "https://us-west-3"
+    # - url: "https://us-east-4"
+
+  image:
+    repository: ethpandaops/dugtrio
+    tag: 1.0.5-debian
+    pullPolicy: IfNotPresent
+
+  resources:
+    limits:
+      cpu: 1
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 256Mi
+
+proxyd:
+  nodes: []
+    # - url: "https://us-west-1"
+    #   ws: "wss://us-west-1"
+    #   multicall: true
+    # - url: "https://us-east-2"
+    #   ws: "wss://us-west-2"
+    #   multicall: true
+    # - url: "https://us-west-3"
+    #   ws: "wss://us-west-3"
+    # - url: "https://us-east-4"
+    #   ws: "wss://us-west-4"
+
+  image:
+    repository: us-docker.pkg.dev/oplabs-tools-artifacts/images/proxyd
+    tag: v4.14.5
+    pullPolicy: IfNotPresent
+
+  resources:
+    limits:
+      cpu: 2
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 256Mi
+
+# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  executionRpcDNSName: ""
+  executionWsDNSName: ""
+  beaconRpcDNSName: ""
+
+vmPodScrape:
+  # -- If true, a ServiceMonitor CRD is created for a prometheus operator
+  # https://github.com/coreos/prometheus-operator
+  enabled: true
+  #* region to use in region_pod label
+  #* This is used to identify the region of the pod in the metrics
+  region: ""
+
+fullnameOverride: proxy
+
+# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# This is to override the chart name.
+nameOverride: ""
+
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+podAnnotations: {}
+# This is for setting Kubernetes Labels to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+nodeSelector: {}
+
+tolerations: []
