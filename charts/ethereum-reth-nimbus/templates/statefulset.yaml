@@ -372,6 +372,7 @@ spec:
             - --metrics
             - --metrics-address=0.0.0.0
             - --metrics-port=7301
+            - --debug-peerdas-supernode
           ports:
             - containerPort: 9545
               name: eth2-rpc
