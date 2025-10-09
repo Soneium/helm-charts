@@ -33,6 +33,16 @@ entries:
   l1-rpc-proxy:
   - apiVersion: v2
     appVersion: 1.16.0
+    created: "2025-10-09T01:57:28.030631673Z"
+    description: A Helm chart for Kubernetes
+    digest: 04278a1e3822328eeab16b334223caab4541f678c0c28e94bb5890a5a632d971
+    name: l1-rpc-proxy
+    type: application
+    urls:
+    - https://github.com/Soneium/helm-charts/releases/download/l1-rpc-proxy-0.0.36/l1-rpc-proxy-0.0.36.tgz
+    version: 0.0.36
+  - apiVersion: v2
+    appVersion: 1.16.0
     created: "2025-06-26T08:43:02.275285853Z"
     description: A Helm chart for Kubernetes
     digest: 8ea416f0e29ccf30fe283ba8c63c64a2f1da5b2ca80912143a1d100890b47c6a
@@ -57,4 +67,4 @@ entries:
     urls:
     - https://github.com/Soneium/helm-charts/releases/download/universal-helm-0.7.2/universal-helm-0.7.2.tgz
     version: 0.7.2
-generated: "2025-06-26T08:43:02.460494782Z"
+generated: "2025-10-09T01:57:28.030646541Z"
