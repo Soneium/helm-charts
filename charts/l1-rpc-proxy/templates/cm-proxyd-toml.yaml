@@ -103,6 +103,7 @@ data:
     eth_getFilterChanges = "main"
     eth_sendRawTransaction = "multicall"
     eth_syncing = "main"
+    eth_blobBaseFee = "main"
     net_version = "main"
     rollup_getInfo = "main"
     web3_clientVersion = "main"
