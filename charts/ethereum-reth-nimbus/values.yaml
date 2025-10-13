@@ -74,6 +74,14 @@ dataSnapshot:
   backupRetainDays: 7
   activeDeadlineHours: 8
   ethereumClients: reth-nimbus
+  backup:
+    resources:
+      requests:
+        cpu: 1
+        memory: 2Gi
+      limits:
+        cpu: 2
+        memory: 3Gi
 
 # -- Pod annotations
 podAnnotations:
