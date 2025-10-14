@@ -15,7 +15,7 @@ persistence:
 erigon:
   image:
     repository: erigontech/erigon
-    tag: v3.0.3
+    tag: v3.2.0
   resources:
     requests:
       cpu: 2
