@@ -47,6 +47,7 @@ data:
 
     [backends.{{ $name }}]
     max_ws_conns = 2000
+    consensus_skip_peer_count = {{ .consensus_skip_peer_count | default false }}
     rpc_url = "{{ .url }}"
     ws_url = "{{ .ws | default "ws://dummy"}}"
     {{- if .backendGroup_Main }}
