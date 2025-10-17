@@ -91,7 +91,7 @@ spec:
               restic self-update
 
               #* Restore the data
-              restic restore latest --exclude-xattr security.selinux --target $APP_HOME
+              restic restore --time "{{ .Values.dataSnapshot.restoreDate }}" --exclude-xattr security.selinux --target $APP_HOME
 
               chown -R {{ .Values.securityContext.runAsUser }}:{{ .Values.securityContext.runAsGroup }} $APP_HOME
           securityContext:
