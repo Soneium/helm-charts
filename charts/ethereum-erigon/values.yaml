@@ -43,7 +43,7 @@ ethereumExporter:
 dataSnapshot:
   # Adds init container to restare data from S3 snapshot
   restoreData: false
-  restoreDate: ""
+  snapshotId: latest
   # Creates cronjob to schedule data abackups to S3
   backupData: false
   sourcePvcName: storage-node-0

@@ -19,7 +19,7 @@ erigon:
 dataSnapshot:
   # Adds init container to restare data from S3 snapshot
   restoreData: true
-  restoreDate: "2025-10-14"
+  snapshotId: 69a8ca16
   # Creates cronjob to schedule data abackups to S3
   backupData: true
   sourcePod: node-0
