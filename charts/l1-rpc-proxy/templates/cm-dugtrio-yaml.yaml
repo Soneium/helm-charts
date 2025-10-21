@@ -24,6 +24,12 @@ data:
     {{- $name := regexReplaceAll "(http|https)://([^/]+).*" .url "${2}" | replace "." "_" | replace ":" "_"  }}
       - name: "{{$name}}"
         url: "{{ .url }}"
+      {{- if .headers }}
+        headers:
+        {{- range $key, $value := .headers }}
+          {{ $key | quote | default "" }}: {{ $value | quote | default ""}}
+        {{- end }}
+        {{- end }}
     {{- end }}
     {{- end }}
 

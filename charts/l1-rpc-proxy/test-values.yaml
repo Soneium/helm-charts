@@ -1,9 +1,21 @@
 dugtrio:
   nodes:
     - url: "https://us-west-1.something.com"
+      headers:
+        "X-Test": "test"
+        "Y-Test": "test2"
     - url: "https://us-east-2.something.com"
+      headers:
+        "X-Test": "test"
+        "Y-Test": "test2"
     - url: "https://us-west-3.something.com"
+      headers:
+        "X-Test": "test"
+        "Y-Test": "test2"
     - url: "https://us-east-4.something.com"
+      headers:
+        "X-Test": "test"
+        "Y-Test": "test2"
   resources:
     limits:
       cpu: 1
