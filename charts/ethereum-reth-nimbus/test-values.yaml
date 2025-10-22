@@ -7,7 +7,8 @@ persistence:
   size: 30Gi
   storageClassName: lvm-localpv
 
-erigon:
+nimbus:
+  enableFusakaSupernodeFlag: false
   resources:
     requests:
       cpu: 2

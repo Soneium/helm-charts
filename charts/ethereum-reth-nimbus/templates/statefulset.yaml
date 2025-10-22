@@ -372,7 +372,9 @@ spec:
             - --metrics
             - --metrics-address=0.0.0.0
             - --metrics-port=7301
+          {{- if .Values.nimbus.enableFusakaSupernodeFlag }}
             - --debug-peerdas-supernode
+          {{- end }}
           ports:
             - containerPort: 9545
               name: eth2-rpc

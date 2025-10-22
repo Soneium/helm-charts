@@ -26,6 +26,7 @@ reth:
       memory: 24Gi
 
 nimbus:
+  enableFusakaSupernodeFlag: false
   image:
     repository: statusim/nimbus-eth2
     # -- Nimbus image tag
