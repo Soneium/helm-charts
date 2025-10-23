@@ -182,12 +182,7 @@ spec:
                   chmod a+x $KUBECTL
                   $KUBECTL -n {{.Release.Namespace}} delete volumesnapshot $SNAP_NAME
               resources:
-                requests:
-                  cpu: 1
-                  memory: 2Gi
-                limits:
-                  cpu: 2
-                  memory: 3Gi
+                {{- toYaml .Values.dataSnapshot.backup.resources | nindent 16 }}
               volumeMounts:
               - mountPath: /snapshot
                 name: snapshot-volume
