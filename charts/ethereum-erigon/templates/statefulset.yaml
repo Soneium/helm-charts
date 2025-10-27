@@ -264,6 +264,8 @@ spec:
             - --caplin.blobs-archive
             - --caplin.blobs-immediate-backfill
             - --caplin.blobs-no-pruning
+            - --caplin.discovery.tcpport=9222
+            - --caplin.discovery.port=9223
             # - --caplin.checkpoint-sync-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io
             - --beacon.api=beacon,builder,config,debug,events,node,validator,lighthouse
             - --beacon.api.addr=0.0.0.0
@@ -292,6 +294,12 @@ spec:
             - containerPort: 9545
               name: eth2-rpc
               protocol: TCP
+            - containerPort: 9222
+              name: eth2-p2p
+              protocol: TCP
+            - containerPort: 9223
+              name: eth2-discovery
+              protocol: UDP
             - containerPort: 30303
               name: eth1-p2p
               protocol: TCP
