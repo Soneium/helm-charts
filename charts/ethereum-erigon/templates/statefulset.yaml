@@ -259,13 +259,14 @@ spec:
             - --metrics.addr=0.0.0.0
             - --metrics.port=7300
             - --prune.mode=archive
+            - --caplin.discovery.addr=$(EXTERNAL_IP)
+            - --caplin.discovery.tcpport=9222
+            - --caplin.discovery.port=9223
             - --caplin.states-archive
             - --caplin.blocks-archive
             - --caplin.blobs-archive
             - --caplin.blobs-immediate-backfill
             - --caplin.blobs-no-pruning
-            - --caplin.discovery.tcpport=9222
-            - --caplin.discovery.port=9223
             # - --caplin.checkpoint-sync-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io
             - --beacon.api=beacon,builder,config,debug,events,node,validator,lighthouse
             - --beacon.api.addr=0.0.0.0
