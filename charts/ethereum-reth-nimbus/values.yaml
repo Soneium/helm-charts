@@ -30,7 +30,7 @@ nimbus:
   image:
     repository: statusim/nimbus-eth2
     # -- Nimbus image tag
-    tag: amd64-v25.9.2
+    tag: amd64-v25.10.0
   resources:
     # -- Nimbus resource requests and limits
     requests:
