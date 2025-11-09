@@ -1,0 +1,194 @@
+{{- if .Values.dataSnapshot.backupData }}
+kind: CronJob
+apiVersion: batch/v1
+metadata:
+  name: backup-{{ include "node.fullname" . }}
+  labels:
+    {{- include "node.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.annotations | nindent 4 }}
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 5
+  schedule: "{{.Values.dataSnapshot.backupSchedule}}"
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{mul 3600 .Values.dataSnapshot.activeDeadlineHours}}
+      template:
+        metadata:
+          annotations:
+            {{- with .Values.podAnnotations }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        spec:
+          tolerations:
+            {{- with .Values.tolerations }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: "statefulset.kubernetes.io/pod-name"
+                        operator: In
+                        values:
+                          - {{.Values.dataSnapshot.sourcePod}}
+                  topologyKey: "kubernetes.io/hostname"
+
+          priorityClassName: system-cluster-critical  #! To evoke if anything else is running there
+          serviceAccountName: {{ include "node.serviceAccountName" . }}
+          restartPolicy: Never
+          hostPID: true
+          hostIPC: true
+          initContainers:
+            - name: mount-data
+              image: debian:12-slim
+              securityContext:
+                runAsUser: 0
+                privileged: true
+              command:
+                - /bin/bash
+                - -xuc
+                - |
+                  apt update
+                  apt install -y curl ca-certificates
+
+                  #* Remove the service to remove LB
+                  KUBECTL="/tmp/kubectl"
+                  curl -Lo $KUBECTL https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
+                  chmod a+x $KUBECTL
+
+                  #* Create the snapshot
+                  SNAP_NAME="node-snapshot"
+
+                  #* Cleaning if snapshot left from previouse failed job
+                  if $KUBECTL -n {{.Release.Namespace}} get volumesnapshot $SNAP_NAME >/dev/null 2>&1; then
+                    echo "There is snapshot $SNAP_NAME from previouse run, cleaning..."
+                    LV_NAME=$($KUBECTL -n {{.Release.Namespace}} get pvc {{.Values.dataSnapshot.sourcePvcName}} -o jsonpath="{.spec.volumeName}")
+                    nsenter -m/proc/1/ns/mnt -- umount /mnt/snapshot/data
+                    $KUBECTL -n {{.Release.Namespace}} delete volumesnapshot --wait=true $SNAP_NAME
+                    for i in $(seq 1 12); do
+                      if [ "$(nsenter -m/proc/1/ns/mnt -- lvs --noheadings | grep $LV_NAME | wc -l)" -eq 1 ]; then
+                        break
+                      else
+                        sleep 5
+                      fi
+                    done
+                  fi
+                  nsenter -m/proc/1/ns/mnt -- lvs
+
+                  #* Create snapshot
+                  SNAP_YAML=$(mktemp)
+                  cat >$SNAP_YAML <<EOF
+                  apiVersion: snapshot.storage.k8s.io/v1
+                  kind: VolumeSnapshot
+                  metadata:
+                    name: $SNAP_NAME
+                  spec:
+                    volumeSnapshotClassName: lvm-localpv
+                    source:
+                      persistentVolumeClaimName: {{.Values.dataSnapshot.sourcePvcName}}
+                  EOF
+                  cat $SNAP_YAML
+                  $KUBECTL -n {{.Release.Namespace}} apply -f $SNAP_YAML
+
+                  #* Wait for the snapshot to be ready
+                  for i in $(seq 1 12); do
+                    SNAP_STATUS=$($KUBECTL -n {{.Release.Namespace}} get volumesnapshot $SNAP_NAME -o jsonpath="{.status.readyToUse}")
+                    if [ "$SNAP_STATUS" = "true" ]; then
+                      echo "Snapshot is ready"
+                      break
+                    else
+                      echo "Snapshot is not ready yet"
+                      sleep 5
+                    fi
+                  done
+
+                  #* VolumeSnapshot is also LVM volume snapshot name
+                  SNAP_UID=$($KUBECTL -n {{.Release.Namespace}} get volumesnapshot $SNAP_NAME -o jsonpath="{.metadata.uid}")
+
+                  #* Mount the snapshot
+                  nsenter -m/proc/1/ns/mnt -- mkdir -p /mnt/snapshot/data
+                  nsenter -m/proc/1/ns/mnt -- mount -o ro /dev/lvm-localpv/$SNAP_UID /mnt/snapshot/data
+
+                  #* Show lvs
+                  nsenter -m/proc/1/ns/mnt -- lvs
+
+          containers:
+            - name: backup
+              image: debian:12-slim
+              securityContext:
+                runAsUser: 0
+                privileged: true
+              env:
+                # - name: APP_HOME
+                #   value: "/data"
+                - name: AWS_DEFAULT_REGION
+                  value: "{{.Values.dataSnapshot.bucketRegion}}"
+                - name: RESTIC_PASSWORD
+                  value: "astar"
+                - name: RESTIC_PROGRESS_FPS
+                  value: "0.016666"
+                - name: RESTIC_REPOSITORY
+                  value: {{ include "node.resticS3Repo" .}}
+                - name: RESTIC_HOST
+                  value: "{{.Values.dataSnapshot.ethereumClients}}"
+                - name: MAX_BLOCK_AGE_SEC
+                  value: "3600"             #* 2h old
+              command:
+                - /bin/bash
+                - -xuc
+                - |
+                  apt update
+                  apt install -y curl ca-certificates restic
+
+                  restic self-update
+
+                  restic check
+                  status=$?
+                  case $status in
+                    0)
+                      echo "Repository is exist."
+                      ;;
+                    10)
+                      echo "Repository does not exist. Initializing..."
+                      restic init
+                      ;;
+                    11)
+                      echo "Repository is locked. Attempting to unlock..."
+                      restic unlock --remove-all
+                      ;;
+                    *)
+                      echo "An unknown error occurred (exit code: $status). Exiting."
+                      exit 1
+                      ;;
+                  esac
+
+                  #* Backup the data
+                  ls /snapshot/data
+                  cd /snapshot/data
+                  restic backup --no-scan --tag={{.Values.reth.image.tag}}-{{.Values.lighthouse.image.tag}} reth lighthouse
+                  restic forget --keep-daily {{.Values.dataSnapshot.backupRetainDays}} --prune
+
+                  #* UMount the snapshot
+                  nsenter -m/proc/1/ns/mnt -- umount /mnt/snapshot/data
+
+                  #* Delete the snapshot
+                  SNAP_NAME="node-snapshot"
+                  KUBECTL="/tmp/kubectl"
+                  curl -Lo $KUBECTL https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
+                  chmod a+x $KUBECTL
+                  $KUBECTL -n {{.Release.Namespace}} delete volumesnapshot $SNAP_NAME
+              resources:
+                {{- toYaml .Values.dataSnapshot.backup.resources | nindent 16 }}
+              volumeMounts:
+              - mountPath: /snapshot
+                name: snapshot-volume
+                readOnly: true
+          volumes:
+            - name: snapshot-volume
+              hostPath:
+                path: /mnt/snapshot
+{{- end }}
