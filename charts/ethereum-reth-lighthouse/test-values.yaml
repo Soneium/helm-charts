@@ -1,13 +1,13 @@
 ethereumChain: somechain
 
 nodeSelector:
-  node.kubernetes.io/instance-type: i3.4xlarge
+  node.kubernetes.io/instance-type: i3en.2xlarge
 
 persistence:
   size: 30Gi
   storageClassName: lvm-localpv
 
-nimbus:
+lighthouse:
   enableFusakaSupernodeFlag: false
   resources:
     requests:
@@ -18,7 +18,7 @@ nimbus:
       memory: 24Gi
 
 dataSnapshot:
-  # Adds init container to restare data from S3 snapshot
+  # Adds init container to restore data from S3 snapshot
   restoreData: true
   snapshotId: 07d8efe2
   # Creates cronjob to schedule data abackups to S3

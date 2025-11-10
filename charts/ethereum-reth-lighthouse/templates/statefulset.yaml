@@ -140,13 +140,14 @@ spec:
               if [ ! -d $APP_HOME/lighthouse/db ]; then
                 #* if lighthouse folder is empty state sync it manually 1st time
                 #* see https://lighthouse-book.sigmaprime.io/advanced_checkpoint_sync.html
-                /home/user/lighthouse_beacon_node \
-                trustedNodeSync \
+                /home/user/lighthouse bn \
                   --network={{.Values.ethereumChain}} \
-                  --data-dir=$APP_HOME/lighthouse \
-                  --trusted-node-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io \
-                  --reindex \
-                  --backfill
+                  --execution-endpoint=http://localhost:8551 \
+                  --data-dir=$(APP_HOME)/lighthouse \
+                  --execution-jwt=$(APP_HOME)/jwt.txt
+                  --checkpoint-sync-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io \
+                  --http \
+                  --metrics
               fi
           volumeMounts:
             - name: storage
