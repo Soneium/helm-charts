@@ -357,7 +357,8 @@ spec:
           command:
             # - sleep
             # - "10000000000000"
-            - lighthouse bn
+            - lighthouse
+            - bn
             - --network={{.Values.ethereumChain}}
             - --datadir=$(APP_HOME)/lighthouse
             - --execution-endpoint=http://localhost:8551
@@ -374,7 +375,7 @@ spec:
             - --metrics-address=0.0.0.0
             - --metrics-port=7301
           {{- if .Values.lighthouse.enableFusakaSupernodeFlag }}
-            - supernode
+            - --supernode
           {{- end }}
           ports:
             - containerPort: 9545
