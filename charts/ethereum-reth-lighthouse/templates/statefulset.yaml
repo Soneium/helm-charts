@@ -143,7 +143,7 @@ spec:
                 lighthouse bn \
                   --network={{.Values.ethereumChain}} \
                   --execution-endpoint=http://localhost:8551 \
-                  --data-dir=$(APP_HOME)/lighthouse \
+                  --datadir=$(APP_HOME)/lighthouse \
                   --execution-jwt=$(APP_HOME)/jwt.txt
                   --checkpoint-sync-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io \
                   --http \
@@ -359,7 +359,7 @@ spec:
             # - "10000000000000"
             - lighthouse bn
             - --network={{.Values.ethereumChain}}
-            - --data-dir=$(APP_HOME)/lighthouse
+            - --datadir=$(APP_HOME)/lighthouse
             - --execution-endpoint=http://localhost:8551
             - --execution-jwt=$(APP_HOME)/jwt.txt
             - --enr-address=$(EXTERNAL_IP)
