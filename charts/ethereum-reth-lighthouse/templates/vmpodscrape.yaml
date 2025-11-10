@@ -1,0 +1,49 @@
+{{- if .Values.vmPodScrape.enabled }}
+kind: VMPodScrape
+apiVersion: operator.victoriametrics.com/v1beta1
+metadata:
+  name: {{ include "node.fullname" . }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "node.selectorLabels" . | nindent 6 }}
+  podMetricsEndpoints:
+    - targetPort: 7300 #reth
+      path: /
+      scheme: http
+      metricRelabelConfigs:
+        #* Add label region_pod
+        - action: replace_all
+          source_labels: ["pod"]
+          target_label: "region_pod"
+          regex: "(.+)"
+          replacement: "{{.Values.vmPodScrape.region}}-$1"
+        - target_label: service
+          replacement: l1-node
+    - targetPort: 7301 #lighthouse
+      path: /metrics
+      scheme: http
+      metricRelabelConfigs:
+        #* Add label region_pod
+        - action: replace_all
+          source_labels: ["pod"]
+          target_label: "region_pod"
+          regex: "(.+)"
+          replacement: "{{.Values.vmPodScrape.region}}-$1"
+        - target_label: service
+          replacement: l1-node
+  {{- if .Values.ethereumExporter.enabled }}
+    - targetPort: 7302 #exporter
+      path: /metrics
+      scheme: http
+      metricRelabelConfigs:
+        #* Add label region_pod
+        - action: replace_all
+          source_labels: ["pod"]
+          target_label: "region_pod"
+          regex: "(.+)"
+          replacement: "{{.Values.vmPodScrape.region}}-$1"
+        - target_label: service
+          replacement: l1-node
+  {{- end }}
+{{- end }}

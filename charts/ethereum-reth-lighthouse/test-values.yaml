@@ -1,0 +1,50 @@
+ethereumChain: somechain
+
+nodeSelector:
+  node.kubernetes.io/instance-type: i3en.2xlarge
+
+persistence:
+  size: 30Gi
+  storageClassName: lvm-localpv
+
+lighthouse:
+  enableFusakaSupernodeFlag: false
+  resources:
+    requests:
+      cpu: 2
+      memory: 16Gi
+    limits:
+      # cpu: 500m
+      memory: 24Gi
+
+dataSnapshot:
+  # Adds init container to restore data from S3 snapshot
+  restoreData: true
+  snapshotId: 07d8efe2
+  # Creates cronjob to schedule data abackups to S3
+  backupData: true
+  sourcePod: node-0
+  bucketName: test-s3
+  bucketRegion: ap-northeast-1
+  awsSnapshotIamRoleArn: some-iam-role-arn
+  backupSchedule: "0 0 * * *"
+  backup:
+    resources:
+      requests:
+        cpu: 1
+        memory: 4Gi
+      limits:
+        cpu: 2
+        memory: 6Gi
+
+p2pNlb:
+  #* AWS EIP to attach to NLB exposing p2p ports
+  eIPs:
+    - eipalloc-1234567890abcdef0
+  #* Security group to attach to NLB exposing p2p ports
+  securityGroup: some-security-group-id
+  #* Subnet name without az name, subnets should be named in the following way: `${publicSubnetPrefix}-${azName}`.
+  subnetPrefix: some-subnet-name
+
+vmPodScrape:
+  region: shortregion

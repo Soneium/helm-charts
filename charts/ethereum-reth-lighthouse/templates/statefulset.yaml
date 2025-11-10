@@ -1,0 +1,533 @@
+{{- $dataPath := "/data" }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "node.fullname" . }}
+  labels:
+    {{- include "node.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.annotations | nindent 4 }}
+spec:
+  podManagementPolicy: {{ .Values.podManagementPolicy }}
+  revisionHistoryLimit: 3
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "node.selectorLabels" . | nindent 6 }}
+  serviceName: {{ include "node.fullname" . }}
+  updateStrategy:
+    {{- toYaml .Values.updateStrategy | nindent 4 }}
+  template:
+    metadata:
+      labels:
+        {{- include "node.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "node.serviceAccountName" . }}
+    {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+    {{- end }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      affinity:
+        #* Don't run more than one on the same node
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                - key: app.kubernetes.io/instance
+                  operator: In
+                  values:
+                    - {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      tolerations:
+        {{- with .Values.tolerations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      initContainers:
+      {{- if .Values.dataSnapshot.restoreData }}
+        - name: restore-from-backup
+          image: restic/restic:latest
+          env:
+            - name: APP_HOME
+              value: "{{$dataPath}}"
+            - name: AWS_DEFAULT_REGION
+              value: "{{.Values.dataSnapshot.bucketRegion}}"
+            - name: RESTIC_PASSWORD
+              value: "astar"
+            - name: RESTIC_PROGRESS_FPS
+              value: "0.016666"
+            - name: RESTIC_REPOSITORY
+              value: {{ include "node.resticS3Repo" .}}
+            - name: RESTIC_HOST
+              value: "{{.Values.ethereumClients}}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -exu
+
+              if [ -d $APP_HOME/reth ]; then
+                echo "$APP_HOME/reth folder exists, skipping restore"
+                exit 0
+              fi
+
+              restic self-update
+
+              #* Restore the data
+              restic restore {{ .Values.dataSnapshot.snapshotId }} --exclude-xattr security.selinux --target $APP_HOME
+
+              chown -R {{ .Values.securityContext.runAsUser }}:{{ .Values.securityContext.runAsGroup }} $APP_HOME
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: storage
+              mountPath: {{$dataPath}}
+      {{- end }}
+
+        - name: init-dirs
+          image: alpine:latest
+          env:
+            - name: APP_HOME
+              value: {{$dataPath}}
+          command:
+            - sh
+            - -exuc
+            - |
+              #* Generate the JWT secret key
+              if [ ! -f $APP_HOME/jwt.txt ]; then
+                apk add openssl
+                openssl rand -hex 32 > $APP_HOME/jwt.txt
+              fi
+
+              if [[ ! -d $APP_HOME/reth || ! -d $APP_HOME/lighthouse ]]; then
+                mkdir -p $APP_HOME/reth $APP_HOME/lighthouse
+                chown -R {{ .Values.securityContext.runAsUser }}:{{ .Values.securityContext.runAsGroup }} $APP_HOME
+              fi
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: storage
+              mountPath: {{$dataPath}}
+
+        - name: lighthouse-trusted-sync
+          image: {{.Values.lighthouse.image.repository}}:{{.Values.lighthouse.image.tag}}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          env:
+            - name: APP_HOME
+              value: {{$dataPath}}
+          command:
+            - sh
+            - -exuc
+            - |
+              id
+              if [ ! -d $APP_HOME/lighthouse/db ]; then
+                #* if lighthouse folder is empty state sync it manually 1st time
+                #* see https://lighthouse-book.sigmaprime.io/advanced_checkpoint_sync.html
+                /home/user/lighthouse bn \
+                  --network={{.Values.ethereumChain}} \
+                  --execution-endpoint=http://localhost:8551 \
+                  --data-dir=$(APP_HOME)/lighthouse \
+                  --execution-jwt=$(APP_HOME)/jwt.txt
+                  --checkpoint-sync-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io \
+                  --http \
+                  --metrics
+              fi
+          volumeMounts:
+            - name: storage
+              mountPath: {{$dataPath}}
+
+        - name: create-p2p-service
+          image: alpine/k8s:1.30.4
+          env:
+            - name: ARGOCD_INSTANCE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['app.kubernetes.io/instance']
+          command:
+            - /bin/sh
+            - -exuc
+            - |
+              SVC_NAME=$HOSTNAME-p2p
+
+              #* Delete LB service if exist
+              kubectl -n {{.Release.Namespace}} delete svc --wait=true $SVC_NAME || true
+
+              TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+              CURRENT_AZ=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/availability-zone)
+              SUBNET_NAME="{{.Values.p2pNlb.subnetPrefix}}-$CURRENT_AZ"
+
+              {{- if gt (len .Values.p2pNlb.eIPs) 0 }}
+              #* if EIPs are provided, use them
+              ORDINAL=$(echo $HOSTNAME|grep -Eo '[0-9]+$')
+              EIP_ID=$(echo '{{toJson .Values.p2pNlb.eIPs}}' | jq -r '.['$ORDINAL']'|cut -d: -f1| xargs)
+              EXTERNAL_IP=$(echo '{{toJson .Values.p2pNlb.eIPs}}' | jq -r '.['$ORDINAL']' |cut -d: -f2| xargs)
+              {{- end}}
+
+              #* Create LB service to expose p2p
+              SVC_YAML=$(mktemp)
+              cat >$SVC_YAML <<EOF
+              apiVersion: v1
+              kind: Service
+              metadata:
+                name: $SVC_NAME
+                labels:
+                  argocd.argoproj.io/instance: $ARGOCD_INSTANCE_NAME
+                  app.kubernetes.io/instance: $ARGOCD_INSTANCE_NAME
+                  app.kubernetes.io/part-of: argocd
+                annotations:
+                  argocd.argoproj.io/compare-options: IgnoreExtraneous
+                  argocd.argoproj.io/sync-options: Prune=false
+                  service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+                  service.beta.kubernetes.io/aws-load-balancer-type: external
+                  service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
+              {{- if gt (len .Values.p2pNlb.eIPs) 0 }}
+                  service.beta.kubernetes.io/aws-load-balancer-eip-allocations: $EIP_ID
+              {{- end }}
+                  service.beta.kubernetes.io/aws-load-balancer-subnets: $SUBNET_NAME
+                  service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: preserve_client_ip.enabled=true
+                  service.beta.kubernetes.io/aws-load-balancer-security-groups: {{.Values.p2pNlb.securityGroup}}
+                  service.beta.kubernetes.io/aws-load-balancer-manage-backend-security-group-rules: "false"
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-protocol: http
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "8545"
+                  service.beta.kubernetes.io/aws-load-balancer-healthcheck-success-codes: "200-499"      #!Don't care what the code is, just need to be 200-499
+              spec:
+                selector:
+                  statefulset.kubernetes.io/pod-name: $HOSTNAME
+                loadBalancerClass: service.k8s.aws/nlb
+                type: LoadBalancer
+                externalTrafficPolicy: Local
+                publishNotReadyAddresses: true
+                ports:
+                  - name: eth1-p2p
+                    targetPort: eth1-p2p
+                    port: 30303
+                    protocol: TCP
+                  - name: eth1-discovery
+                    targetPort: eth1-discovery
+                    port: 30304
+                    protocol: UDP
+                  - name: eth2-p2p
+                    targetPort: eth2-p2p
+                    port: 9222
+                    protocol: TCP
+                  - name: eth2-discovery
+                    targetPort: eth2-discovery
+                    port: 9223
+                    protocol: UDP
+              EOF
+
+              cat $SVC_YAML
+              kubectl -n {{.Release.Namespace}} apply -f $SVC_YAML
+
+              #* if EIPs are not provided, get the IP resolving the LB's DNS name
+              {{- if eq (len .Values.p2pNlb.eIPs) 0 }}
+
+              #* Whait LB is deployed and got public DNS name
+              for i in $(seq 20); do
+                LB_DNS_NAME=$(kubectl get svc $SVC_NAME -o json| jq -r '.status.loadBalancer.ingress.[0].hostname')
+                if [ "$LB_DNS_NAME" != "null" ]; then
+                  break
+                fi
+                echo "$i: Waiting NLB is provisioned"
+                sleep 5
+              done
+
+              #* Resolve the LB's DNS name to get the its IP, which is the node external IP
+              for i in $(seq 10); do
+                if nslookup $LB_DNS_NAME; then
+                  EXTERNAL_IP=$(nslookup $LB_DNS_NAME|tail -n+4|grep "Address:"|cut -d" " -f2)
+                  #* If EXTERNAL_IP is not empty
+                  if [ -n "$EXTERNAL_IP" ]; then
+                    break
+                  fi
+                fi
+                echo "$i: Waiting NLB DNS name is provisioned"
+                sleep 30
+              done
+              {{- end}}
+
+              kubectl annotate pod $HOSTNAME external-ip=$EXTERNAL_IP --overwrite;
+
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: reth
+          image: {{ .Values.reth.image.repository }}:{{ .Values.reth.image.tag }}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          env:
+            - name: EXTERNAL_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['external-ip']
+            - name: APP_HOME
+              value: "{{$dataPath}}"
+          command:
+            # - sleep
+            # - "10000000000000"
+            - reth
+            - node
+            - --chain={{.Values.ethereumChain}}
+            - --datadir=$(APP_HOME)/reth
+            - --http
+            - --http.addr=0.0.0.0
+            - --http.port=8545
+            - --http.api=admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots
+            - --http.corsdomain=*
+            - --ws
+            - --ws.addr=0.0.0.0
+            - --ws.port=8546
+            - --ws.origins=*
+            - --ws.api=admin,debug,eth,net,trace,txpool,web3,rpc,reth,ots
+            - --authrpc.jwtsecret=$(APP_HOME)/jwt.txt
+            - --authrpc.addr=0.0.0.0
+            - --authrpc.port=8551
+            - --port=30303
+            - --discovery.port=30304
+            - --metrics=0.0.0.0:7300
+            - --log.file.max-files=0
+            - --nat=extip:$(EXTERNAL_IP)
+            - --p2p-secret-key=$(APP_HOME)/reth_p2p_key_$(EXTERNAL_IP)
+          ports:
+            - containerPort: 8545
+              name: eth1-rpc
+              protocol: TCP
+            - containerPort: 8546
+              name: eth1-ws
+              protocol: TCP
+            - containerPort: 30303
+              name: eth1-p2p
+              protocol: TCP
+            - containerPort: 30304
+              name: eth1-discovery
+              protocol: UDP
+            - containerPort: 7300
+              name: eth1-metrics
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 8545
+          startupProbe:
+            tcpSocket:
+              port: 8545
+            periodSeconds: 30
+            failureThreshold: 20
+          resources:
+            {{- toYaml .Values.reth.resources | nindent 12 }}
+          lifecycle:
+            preStop:  #* To let it reply to all requests in process
+              exec:
+                command: ["/bin/sh", "-c", "sleep 60"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.extraVolumeMounts }}
+              {{ toYaml .Values.extraVolumeMounts | nindent 12}}
+            {{- end }}
+            - name: storage
+              mountPath: {{$dataPath}}
+        - name: lighthouse
+          image: {{.Values.lighthouse.image.repository}}:{{.Values.lighthouse.image.tag}}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          env:
+            - name: EXTERNAL_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['external-ip']
+            - name: APP_HOME
+              value: "{{$dataPath}}"
+          command:
+            # - sleep
+            # - "10000000000000"
+            - /home/user/lighthouse bn
+            - --network={{.Values.ethereumChain}}
+            - --data-dir=$(APP_HOME)/lighthouse
+            - --execution-endpoint=http://localhost:8551
+            - --execution-jwt=$(APP_HOME)/jwt.txt
+            - --enr-address=$(EXTERNAL_IP)
+            - --disable-enr-auto-update
+            - --port=9222
+            - --discovery-port=9223
+            - --http
+            - --http-port=9545
+            - --http-address=0.0.0.0
+            - --http-allow-origin=*
+            - --metrics
+            - --metrics-address=0.0.0.0
+            - --metrics-port=7301
+          {{- if .Values.lighthouse.enableFusakaSupernodeFlag }}
+            - supernode
+          {{- end }}
+          ports:
+            - containerPort: 9545
+              name: eth2-rpc
+              protocol: TCP
+            - containerPort: 9222
+              name: eth2-p2p
+              protocol: TCP
+            - containerPort: 9223
+              name: eth2-discovery
+              protocol: UDP
+            - containerPort: 7301
+              name: eth2-metrics
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 9545
+          resources:
+            {{- toYaml .Values.lighthouse.resources | nindent 12 }}
+          lifecycle:
+            preStop:  #* To let it reply to all requests in process
+              exec:
+                command: ["/bin/sh", "-c", "sleep 60"]
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            {{- if .Values.extraVolumeMounts }}
+              {{ toYaml .Values.extraVolumeMounts | nindent 12}}
+            {{- end }}
+            - name: storage
+              mountPath: {{$dataPath}}
+
+      {{- if .Values.ethereumExporter.enabled }}
+        - name: ethereum-exporter
+          image: {{.Values.ethereumExporter.image.repository}}:{{.Values.ethereumExporter.image.tag}}
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              sleep 30
+              exec /ethereum-metrics-exporter \
+                --consensus-url=http://localhost:9545 \
+                --execution-url=http://localhost:8545 \
+                --execution-modules="eth,net,web3,txpool" \  #! Remove admin, due to it failes with current reth
+                --metrics-port=7302
+          ports:
+            - containerPort: 7302
+              name: metrics
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: 7302
+          resources:
+            {{- toYaml .Values.ethereumExporter.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+      {{- end }}
+
+      {{- if .Values.readynessProbe.enabled }}
+        - name: readiness-probe
+          image: python:3.13-bookworm
+          imagePullPolicy: {{ .Values.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - name: readiness-probe-py
+              mountPath: /app
+            - name: storage
+              mountPath: {{$dataPath}}
+          env:
+            - name: VENV_PATH
+              value: /data/readiness
+            - name: APP_DIR
+              value: /app
+            #* Configuring readiness-probe script
+            - name: PROTO
+              value: ethereum
+            # - name: MIN_PEERS
+            #   value: "5"                          #* default
+            # - name: BLOCK_MAX_AGE
+            #   value: "30"                         #* default
+            # - name: EXECUTION_RPC_URL
+            #   value: "http://localhost:8545"      #* default
+            # - name: CONSENSUS_RPC_URL
+            #   value: "http://localhost:9545"      #* default
+            # - name: DEBUG_LEVEL
+            #   value: "1"                          #* default
+          command:
+            # - sleep
+            # - infinity
+            - /bin/bash
+            - -c
+            - |
+              set -exu
+
+              python3 -m venv $VENV_PATH
+
+              echo "Activating virtual environment..."
+              source $VENV_PATH/bin/activate
+
+              pip install --no-cache-dir Flask[async] \
+                                        aiohttp \
+                                        requests \
+                                        gunicorn
+
+              # echo "Starting Gunicorn server..."
+              cd $APP_DIR
+              exec gunicorn \
+                  -w 1 -b "0.0.0.0:8080" \
+                  "readiness_probe:app"           # Format: filename:Flask_instance_name
+
+              # Cleanup
+              deactivate
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 1
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
+          livenessProbe:
+            initialDelaySeconds: 60
+            httpGet:
+              path: /health
+              port: 8080
+          readinessProbe:
+            initialDelaySeconds: 60
+            httpGet:
+              path: /ready
+              port: 8080
+      {{- end }}
+      volumes:
+      {{- if .Values.extraVolumes }}
+        {{ toYaml .Values.extraVolumes | nindent 8}}
+      {{- end }}
+      {{- if .Values.readynessProbe.enabled }}
+        - name: readiness-probe-py
+          configMap:
+            name: readiness-probe-py
+      {{- end }}
+  volumeClaimTemplates:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+        storageClassName: {{ .Values.persistence.storageClassName }}
