@@ -126,32 +126,32 @@ spec:
             - name: storage
               mountPath: {{$dataPath}}
 
-        - name: lighthouse-checkpoint-sync
-          image: {{.Values.lighthouse.image.repository}}:{{.Values.lighthouse.image.tag}}
-          imagePullPolicy: {{ .Values.pullPolicy }}
-          env:
-            - name: APP_HOME
-              value: {{$dataPath}}
-          command:
-            - sh
-            - -exuc
-            - |
-              id
-              if [ ! -d $APP_HOME/lighthouse/db ]; then
-                #* if lighthouse folder is empty state sync it manually 1st time
-                #* see https://lighthouse-book.sigmaprime.io/advanced_checkpoint_sync.html
-                lighthouse bn \
-                  --network={{.Values.ethereumChain}} \
-                  --execution-endpoint=http://localhost:8551 \
-                  --datadir=$(APP_HOME)/lighthouse \
-                  --execution-jwt=$(APP_HOME)/jwt.txt \
-                  --checkpoint-sync-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io \
-                  --http \
-                  --metrics
-              fi
-          volumeMounts:
-            - name: storage
-              mountPath: {{$dataPath}}
+        # - name: lighthouse-checkpoint-sync
+        #   image: {{.Values.lighthouse.image.repository}}:{{.Values.lighthouse.image.tag}}
+        #   imagePullPolicy: {{ .Values.pullPolicy }}
+        #   env:
+        #     - name: APP_HOME
+        #       value: {{$dataPath}}
+        #   command:
+        #     - sh
+        #     - -exuc
+        #     - |
+        #       id
+        #       if [ ! -d $APP_HOME/lighthouse/db ]; then
+        #         #* if lighthouse folder is empty state sync it manually 1st time
+        #         #* see https://lighthouse-book.sigmaprime.io/advanced_checkpoint_sync.html
+        #         lighthouse bn \
+        #           --network={{.Values.ethereumChain}} \
+        #           --execution-endpoint=http://localhost:8551 \
+        #           --datadir=$(APP_HOME)/lighthouse \
+        #           --execution-jwt=$(APP_HOME)/jwt.txt \
+        #           --checkpoint-sync-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io \
+        #           --http \
+        #           --metrics
+        #       fi
+        #   volumeMounts:
+        #     - name: storage
+        #       mountPath: {{$dataPath}}
 
         - name: create-p2p-service
           image: alpine/k8s:1.30.4
