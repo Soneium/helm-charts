@@ -140,7 +140,7 @@ spec:
               if [ ! -d $APP_HOME/lighthouse/db ]; then
                 #* if lighthouse folder is empty state sync it manually 1st time
                 #* see https://lighthouse-book.sigmaprime.io/advanced_checkpoint_sync.html
-                /home/user/lighthouse bn \
+                lighthouse bn \
                   --network={{.Values.ethereumChain}} \
                   --execution-endpoint=http://localhost:8551 \
                   --data-dir=$(APP_HOME)/lighthouse \
@@ -357,7 +357,7 @@ spec:
           command:
             # - sleep
             # - "10000000000000"
-            - /home/user/lighthouse bn
+            - lighthouse bn
             - --network={{.Values.ethereumChain}}
             - --data-dir=$(APP_HOME)/lighthouse
             - --execution-endpoint=http://localhost:8551

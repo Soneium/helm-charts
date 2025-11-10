@@ -6,6 +6,6 @@ home: https://soneium.com
 sources:
   - https://github.com/soneium
 type: application
-version: 0.0.1-dev1
+version: 0.0.1-dev2
 maintainers:
   - name: Sony
