@@ -126,7 +126,7 @@ spec:
             - name: storage
               mountPath: {{$dataPath}}
 
-        - name: lighthouse-trusted-sync
+        - name: lighthouse-checkpoint-sync
           image: {{.Values.lighthouse.image.repository}}:{{.Values.lighthouse.image.tag}}
           imagePullPolicy: {{ .Values.pullPolicy }}
           env:
@@ -144,7 +144,7 @@ spec:
                   --network={{.Values.ethereumChain}} \
                   --execution-endpoint=http://localhost:8551 \
                   --datadir=$(APP_HOME)/lighthouse \
-                  --execution-jwt=$(APP_HOME)/jwt.txt
+                  --execution-jwt=$(APP_HOME)/jwt.txt \
                   --checkpoint-sync-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io \
                   --http \
                   --metrics
