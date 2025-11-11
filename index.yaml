@@ -115,6 +115,20 @@ entries:
     version: 0.0.65
   ethereum-reth-lighthouse:
   - apiVersion: v2
+    created: "2025-11-11T02:04:40.258952403Z"
+    description: 'Ethereum node with reth and lighthouse '
+    digest: 647d11473020ab882ad879db3ec60e8a7cbe07e04b4efb02e16f6bca3f2c9288
+    home: https://soneium.com
+    maintainers:
+    - name: Sony
+    name: ethereum-reth-lighthouse
+    sources:
+    - https://github.com/soneium
+    type: application
+    urls:
+    - https://github.com/Soneium/helm-charts/releases/download/ethereum-reth-lighthouse-0.0.1/ethereum-reth-lighthouse-0.0.1.tgz
+    version: 0.0.1
+  - apiVersion: v2
     created: "2025-11-10T12:07:42.380492615Z"
     description: 'Ethereum node with reth and lighthouse '
     digest: 769c24c1c659556fa36bfe67bd1a36fc109edb6f3d5adb348e4bb13252e1de38
@@ -382,4 +396,4 @@ entries:
     urls:
     - https://github.com/Soneium/helm-charts/releases/download/universal-helm-0.7.2/universal-helm-0.7.2.tgz
     version: 0.7.2
-generated: "2025-11-10T12:07:42.380580539Z"
+generated: "2025-11-11T02:04:40.25904794Z"
