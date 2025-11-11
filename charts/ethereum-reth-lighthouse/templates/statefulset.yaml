@@ -366,7 +366,8 @@ spec:
             - --enr-address=$(EXTERNAL_IP)
             - --disable-enr-auto-update
             - --port=9222
-            - --discovery-port=9223
+            - --quic-port=9223
+            - --logfile-debug-level=debug
             - --http
             - --http-port=9545
             - --http-address=0.0.0.0
