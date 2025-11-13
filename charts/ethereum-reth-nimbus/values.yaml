@@ -15,7 +15,7 @@ reth:
   image:
     repository: ghcr.io/paradigmxyz/reth
     # -- Nimbus image tag
-    tag: v1.8.2
+    tag: v1.9.2
   resources:
     # -- Nimbus resource requests and limits
     requests:
@@ -30,7 +30,7 @@ nimbus:
   image:
     repository: statusim/nimbus-eth2
     # -- Nimbus image tag
-    tag: amd64-v25.10.0
+    tag: amd64-v25.11.0
   resources:
     # -- Nimbus resource requests and limits
     requests:
