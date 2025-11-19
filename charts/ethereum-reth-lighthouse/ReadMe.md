@@ -5,5 +5,6 @@
 Changes:
 - Initial Version 
 
-
+## 1.0.0
+  Adding checkpointUrl parameter
 
