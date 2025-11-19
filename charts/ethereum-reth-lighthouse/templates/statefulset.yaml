@@ -375,7 +375,11 @@ spec:
             - --metrics
             - --metrics-address=0.0.0.0
             - --metrics-port=7301
+          {{- if .Values.lighthouse.checkpointUrl }}
+            - --checkpoint-sync-url={{.Values.lighthouse.checkpointUrl}}
+          {{- else }}
             - --checkpoint-sync-url=https://beaconstate-{{.Values.ethereumChain}}.chainsafe.io
+          {{- end }}
           {{- if .Values.lighthouse.enableFusakaSupernodeFlag }}
             - --supernode
           {{- end }}

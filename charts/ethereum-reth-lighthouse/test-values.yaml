@@ -9,6 +9,7 @@ persistence:
 
 lighthouse:
   enableFusakaSupernodeFlag: false
+  checkpointUrl: "https://mainnet.checkpoint.sigp.io"
   resources:
     requests:
       cpu: 2

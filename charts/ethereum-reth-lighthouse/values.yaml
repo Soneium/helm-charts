@@ -27,6 +27,7 @@ reth:
 
 lighthouse:
   enableFusakaSupernodeFlag: false
+  checkpointUrl: ""
   image:
     repository: sigp/lighthouse
     # -- lighthouse image tag
