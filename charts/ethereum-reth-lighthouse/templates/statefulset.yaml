@@ -399,6 +399,8 @@ spec:
           livenessProbe:
             tcpSocket:
               port: 9545
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
           resources:
             {{- toYaml .Values.lighthouse.resources | nindent 12 }}
           lifecycle:
