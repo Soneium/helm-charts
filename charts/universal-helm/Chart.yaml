@@ -7,8 +7,10 @@ keywords:
   - web3
 
 maintainers:
-  - email: vlad.sh@startale.com
-  - email: marijan.cavar@startale.com
+  - name: Vlad
+    email: vlad.sh@startale.com
+  - name: Marijan Cavar
+    email: marijan.cavar@startale.com
 
 type: application
 
