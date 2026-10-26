@@ -59,6 +59,8 @@ ingress:
   executionRpcDNSName: ""
   executionWsDNSName: ""
   beaconRpcDNSName: ""
+  # -- Secret holding the TLS certificate for the ingress hosts (optional).
+  tlsSecretName: ""
 
 vmPodScrape:
   # -- If true, a ServiceMonitor CRD is created for a prometheus operator
@@ -69,6 +71,9 @@ vmPodScrape:
   region: ""
 
 fullnameOverride: proxy
+
+# Must exceed the preStop sleep (60s) so in-flight requests are drained.
+terminationGracePeriodSeconds: 90
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []

@@ -11,7 +11,11 @@ metadata:
       {{- toYaml . | nindent 4 }}
     {{- end }}
 spec:
-  replicas: {{ default 1 $dpl.replicas }}
+{{- if hasKey $dpl "replicas" }}
+  replicas: {{ $dpl.replicas }}
+{{- else }}
+  replicas: 1
+{{- end }}
   selector:
     matchLabels:
       deploymentname: {{ $dpl.name }}

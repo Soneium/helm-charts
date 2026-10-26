@@ -18,6 +18,9 @@ spec:
       - {{.Values.ingress.executionRpcDNSName}}
       - {{.Values.ingress.executionWsDNSName}}
       - {{.Values.ingress.beaconRpcDNSName}}
+      {{- with .Values.ingress.tlsSecretName }}
+      secretName: {{ . }}
+      {{- end }}
   rules:
     - host: {{.Values.ingress.executionRpcDNSName}}
       http:

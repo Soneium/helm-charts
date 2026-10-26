@@ -25,6 +25,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
+        checksum/readiness-probe: {{ include "node.readinessProbeScript" . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -369,7 +370,7 @@ spec:
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           volumeMounts:
-            - name: readiness-probe-py
+            - name: readiness-probe
               mountPath: /app
             - name: storage
               mountPath: {{$dataPath}}
@@ -444,9 +445,9 @@ spec:
         {{ toYaml .Values.extraVolumes | nindent 8}}
       {{- end }}
       {{- if .Values.readynessProbe.enabled }}
-        - name: readiness-probe-py
+        - name: readiness-probe
           configMap:
-            name: readiness-probe-py
+            name: {{ include "node.fullname" . }}-readiness-probe
       {{- end }}
 
   volumeClaimTemplates:

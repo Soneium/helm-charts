@@ -12,8 +12,8 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/cm-dugtrio-yaml: {{.Files.Get "templates/cm-dugtrio-yaml.yaml" | sha256sum }}
-        checksum/cm-proxyd-toml: {{.Files.Get "templates/cm-proxyd-toml.yaml" | sha256sum }}
+        checksum/cm-dugtrio-yaml: {{ include "rpc-proxy.dugtrioYaml" . | sha256sum }}
+        checksum/cm-proxyd-toml: {{ include "rpc-proxy.proxydToml" . | sha256sum }}
       {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -23,6 +23,9 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      # preStop sleeps 60s to drain in-flight requests; the default grace
+      # period is 30s, which would SIGKILL the container mid-drain.
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -111,10 +114,10 @@ spec:
       volumes:
         - name: proxyd-toml
           configMap:
-            name: proxyd-toml
+            name: {{ include "rpc-proxy.fullname" . }}-proxyd-toml
         - name: dugtrio-yaml
           configMap:
-            name: dugtrio-yaml
+            name: {{ include "rpc-proxy.fullname" . }}-dugtrio-yaml
 
       {{- with .Values.nodeSelector }}
       nodeSelector:
