@@ -60,7 +60,11 @@ spec:
         {{- toYaml . | nindent 6 }}
       {{- end }}
 
-      {{- with $sts.imagePullSecrets }}
+      {{- $imagePullSecrets := $.Values.global.imagePullSecrets }}
+      {{- if hasKey $sts "imagePullSecrets" }}
+      {{- $imagePullSecrets = get $sts "imagePullSecrets" }}
+      {{- end }}
+      {{- with $imagePullSecrets }}
       imagePullSecrets: {{ toYaml . | nindent 8 }}
       {{- end }}
       containers:
