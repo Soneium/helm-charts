@@ -65,14 +65,14 @@ spec:
   selector:
     deploymentname: {{ $dpl.name }}
   type: {{ default "ClusterIP" $prt.type }}
+  {{- if default false $prt.publishNotReadyAddresses}}
+  publishNotReadyAddresses: true
+  {{- end}}
   ports:
     - port: {{ $prt.port }}
       targetPort: {{ $prt.port }}
       protocol: {{ default "TCP" $prt.protocol }}
       name: {{ $prt.name }}
-      {{- if default false $prt.publishNotReadyAddresses}}
-      publishNotReadyAddresses: true
-      {{- end}}
 {{- end }}
 {{- end }}
 {{- end }}
