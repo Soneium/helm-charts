@@ -56,3 +56,53 @@ Selector labels
 app.kubernetes.io/name: {{ include "general.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/* Render each Pod volume once, while keeping mounts local to each container. */}}
+{{- define "general.volumes" -}}
+{{- $definitions := list -}}
+{{- if .legacyMounts -}}
+{{- range .workload.containers -}}
+{{- range .mountConfigMaps -}}
+{{- $definitions = append $definitions (dict "configMap" .name) -}}
+{{- end -}}
+{{- end -}}
+{{- range .workload.containers -}}
+{{- range .mountSecrets -}}
+{{- $definitions = append $definitions (dict "secretName" .name) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- range .workload.containers -}}
+{{- $definitions = concat $definitions (default (list) .extraVolumes) -}}
+{{- end -}}
+{{- with .workload.persistence -}}
+{{- $definitions = concat $definitions (default (list) .extraVolumes) -}}
+{{- end -}}
+
+{{- $seen := dict -}}
+{{- range $definitions -}}
+{{- $name := "" -}}
+{{- $source := dict -}}
+{{- if hasKey . "secretName" -}}
+{{- $name = .secretName -}}
+{{- $source = dict "secret" (dict "secretName" $name "optional" false) -}}
+{{- else if hasKey . "configMap" -}}
+{{- $name = .configMap -}}
+{{- $source = dict "configMap" (dict "name" $name) -}}
+{{- else if hasKey . "persistentVolumeClaim" -}}
+{{- $name = .persistentVolumeClaim -}}
+{{- $source = dict "persistentVolumeClaim" (dict "claimName" $name) -}}
+{{- end -}}
+{{- if $name -}}
+{{- if hasKey $seen $name -}}
+{{- if not (deepEqual (get $seen $name) $source) -}}
+{{- fail (printf "conflicting volume sources for %s" $name) -}}
+{{- end -}}
+{{- else -}}
+{{- $_ := set $seen $name $source }}
+- name: {{ $name }}
+{{ toYaml $source | indent 2 }}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
