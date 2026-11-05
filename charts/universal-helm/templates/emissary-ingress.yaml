@@ -9,7 +9,7 @@
 
 {{ $emissarySvc:="emissary-ingress.emissary-ingress"}}
 {{ if $.Values.global.emissary}}{{if $.Values.global.emissary.emissaryServiceName}}
-  {{$emissarySvc:=$.Values.global.emissary.emissaryServiceName}}
+  {{$emissarySvc = $.Values.global.emissary.emissaryServiceName}}
 {{ end }}{{end}}
 
 kind: Host
@@ -63,7 +63,7 @@ spec:
 
 {{ $emissarySvc:="emissary-ingress.emissary-ingress"}}
 {{ if $.Values.global.emissary}}{{if $.Values.global.emissary.emissaryServiceName}}
-  {{$emissarySvc:=$.Values.global.emissary.emissaryServiceName}}
+  {{$emissarySvc = $.Values.global.emissary.emissaryServiceName}}
 {{ end }}{{end}}
 
 kind: Host
