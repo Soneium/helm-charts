@@ -112,40 +112,5 @@ spec:
       {{- end }} # {{/* range $kcntnr, $cntnr := $dpl.containers */}}
 
       volumes:
-      {{- range $cntnr := $dpl.containers -}}
-        {{- range $vol := $cntnr.extraVolumes }}
-        {{- if hasKey $vol "secretName" }}
-        - name: {{$vol.secretName}}
-          secret:
-            secretName: {{$vol.secretName}}
-            optional: false
-        {{- else if hasKey $vol "configMap" }}
-        - name: {{$vol.configMap}}
-          configMap:
-            name: {{$vol.configMap}}
-        {{- else if hasKey $vol "persistentVolumeClaim" }}
-        - name: {{$vol.persistentVolumeClaim}}
-          persistentVolumeClaim:
-            claimName: {{$vol.persistentVolumeClaim}}
-        {{- end }}
-        {{- end }}
-      {{- end }}
-      {{- if $dpl.persistence}}{{- if $dpl.persistence.extraVolumes}}
-      {{- range $vol := $dpl.persistence.extraVolumes }}
-        {{- if hasKey $vol "secretName" }}
-        - name: {{$vol.secretName}}
-          secret:
-            secretName: {{$vol.secretName}}
-            optional: false
-        {{- else if hasKey $vol "configMap" }}
-        - name: {{$vol.configMap}}
-          configMap:
-            name: {{$vol.configMap}}
-        {{- else if hasKey $vol "persistentVolumeClaim" }}
-        - name: {{$vol.persistentVolumeClaim}}
-          persistentVolumeClaim:
-            claimName: {{$vol.persistentVolumeClaim}}
-        {{- end }}
-      {{- end }}
-      {{- end }}{{- end }}
+{{ include "general.volumes" (dict "workload" $dpl "legacyMounts" false) | nindent 8 }}
 {{ end }} # {{/* range $dpli, $dpl := $.Values.statefulsets */}}
